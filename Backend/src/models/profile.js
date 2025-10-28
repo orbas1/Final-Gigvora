@@ -21,7 +21,11 @@ module.exports = (sequelize) => {
         as: 'tags',
       });
       this.hasMany(models.PortfolioItem, { foreignKey: 'profile_id', as: 'portfolio' });
-      this.hasMany(models.Review, { foreignKey: 'profile_id', as: 'reviews' });
+      this.hasMany(models.Review, {
+        foreignKey: 'profile_id',
+        as: 'reviews',
+        scope: { subject_type: 'profile' },
+      });
     }
   }
 

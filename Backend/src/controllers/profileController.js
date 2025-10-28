@@ -47,7 +47,21 @@ const portfolioSchema = Joi.object({
   url: Joi.string().uri().optional(),
   media: Joi.object().optional(),
 });
-const reviewSchema = Joi.object({ reviewer_id: Joi.string().uuid().required(), rating: Joi.number().min(1).max(5).required(), comment: Joi.string().optional() });
+const reviewSchema = Joi.object({
+  rating: Joi.number().min(1).max(5).required(),
+  comment: Joi.string().allow('', null),
+});
+
+const reviewQuerySchema = Joi.object({
+  cursor: Joi.string(),
+  limit: Joi.number().integer().min(1).max(100),
+  sort: Joi.string(),
+  q: Joi.string(),
+  fields: Joi.string(),
+  expand: Joi.string(),
+  include: Joi.string().valid('deleted'),
+  analytics: Joi.boolean().truthy('true', '1', 'yes').falsy('false', '0', 'no'),
+});
 
 const getProfile = async (req, res, next) => {
   try {
@@ -199,8 +213,18 @@ const deletePortfolio = async (req, res, next) => {
 const addReview = async (req, res, next) => {
   try {
     const payload = validate(reviewSchema, req.body);
-    const review = await profileService.addReview(req.params.userId, payload);
+    const review = await profileService.addReview(req.params.userId, req.user, payload);
     res.status(201).json(review);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const listReviews = async (req, res, next) => {
+  try {
+    const query = validate(reviewQuerySchema, req.query);
+    const result = await profileService.listReviews(req.params.userId, query, req.user);
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -250,6 +274,7 @@ module.exports = {
   updatePortfolio,
   deletePortfolio,
   addReview,
+  listReviews,
   trafficAnalytics,
   engagementAnalytics,
   topProfiles,

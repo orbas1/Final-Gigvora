@@ -11,6 +11,7 @@ const {
   sequelize,
 } = require('../models');
 const { ApiError } = require('../middleware/errorHandler');
+const reviewService = require('./reviewService');
 
 const getProfile = async (userId) => {
   const profile = await Profile.findOne({
@@ -19,7 +20,7 @@ const getProfile = async (userId) => {
       { model: ProfileExperience, as: 'experiences' },
       { model: ProfileEducation, as: 'education' },
       { model: PortfolioItem, as: 'portfolio' },
-      { model: Review, as: 'reviews' },
+      { model: Review, as: 'reviews', where: { subject_type: 'profile' }, required: false },
       { model: Skill, as: 'skills' },
       { model: Tag, as: 'tags' },
     ],
@@ -131,10 +132,31 @@ const deletePortfolioItem = async (itemId) => {
   return { success: true };
 };
 
-const addReview = async (profileId, payload) => {
-  const profile = await Profile.findOne({ where: { user_id: profileId } });
+const addReview = async (profileUserId, reviewer, payload) => {
+  const profile = await Profile.findOne({ where: { user_id: profileUserId } });
   if (!profile) throw new ApiError(404, 'Profile not found', 'PROFILE_NOT_FOUND');
-  return Review.create({ ...payload, profile_id: profile.id });
+  return reviewService.createReview(
+    {
+      subject_type: 'profile',
+      subject_id: profile.id,
+      rating: payload.rating,
+      comment: payload.comment,
+    },
+    reviewer
+  );
+};
+
+const listReviews = async (profileUserId, query, currentUser) => {
+  const profile = await Profile.findOne({ where: { user_id: profileUserId } });
+  if (!profile) throw new ApiError(404, 'Profile not found', 'PROFILE_NOT_FOUND');
+  return reviewService.listReviews(
+    {
+      ...query,
+      subject_type: 'profile',
+      subject_id: profile.id,
+    },
+    currentUser
+  );
 };
 
 const trafficAnalytics = async ({ id, from, to, by = 'day' }) => {
@@ -146,7 +168,7 @@ const trafficAnalytics = async ({ id, from, to, by = 'day' }) => {
 
 const engagementAnalytics = async ({ id }) => {
   const follows = await ProfileSkill.count({ where: { profile_id: id } });
-  const reviews = await Review.count({ where: { profile_id: id } });
+  const reviews = await Review.count({ where: { subject_type: 'profile', subject_id: id } });
   return { follows, reviews };
 };
 
@@ -174,6 +196,7 @@ module.exports = {
   updatePortfolioItem,
   deletePortfolioItem,
   addReview,
+  listReviews,
   trafficAnalytics,
   engagementAnalytics,
   topProfiles,
