@@ -44,6 +44,20 @@ module.exports = (sequelize) => {
       this.hasMany(models.Post, { foreignKey: 'user_id', as: 'posts' });
       this.hasMany(models.Notification, { foreignKey: 'user_id', as: 'notifications' });
       this.hasOne(models.UserSetting, { foreignKey: 'user_id', as: 'settings' });
+      this.belongsToMany(models.Company, {
+        through: models.CompanyEmployee,
+        foreignKey: 'user_id',
+        otherKey: 'company_id',
+        as: 'companies',
+      });
+      this.belongsToMany(models.Agency, {
+        through: models.AgencyMember,
+        foreignKey: 'user_id',
+        otherKey: 'agency_id',
+        as: 'agencies',
+      });
+      this.hasMany(models.Company, { foreignKey: 'owner_id', as: 'ownedCompanies' });
+      this.hasMany(models.Agency, { foreignKey: 'owner_id', as: 'ownedAgencies' });
       this.belongsToMany(models.Group, {
         through: models.GroupMember,
         foreignKey: 'user_id',
