@@ -1,5 +1,6 @@
 require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH || '.env' });
 
+const path = require('path');
 const merge = require('lodash/merge');
 
 const parseOrigins = (value) => {
@@ -23,6 +24,9 @@ const env = process.env.NODE_ENV || 'development';
 const baseConfig = {
   env,
   port: Number(process.env.PORT || 4000),
+  app: {
+    baseUrl: process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 4000}`,
+  },
   jwt: {
     secret: process.env.JWT_SECRET || 'dev-secret',
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
@@ -44,6 +48,16 @@ const baseConfig = {
       origins: parseOrigins(process.env.CORS_ALLOWED_ORIGINS || '*'),
     },
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY, false),
+  },
+  storage: {
+    tokenSecret: process.env.FILE_TOKEN_SECRET || process.env.JWT_SECRET || 'file-token-secret',
+    uploadUrlTtlSeconds: Number(process.env.FILE_UPLOAD_URL_TTL || 900),
+    downloadUrlTtlSeconds: Number(process.env.FILE_DOWNLOAD_URL_TTL || 300),
+    local: {
+      baseDir: process.env.FILE_STORAGE_DIR
+        ? path.resolve(process.env.FILE_STORAGE_DIR)
+        : path.resolve(process.cwd(), process.env.NODE_ENV === 'test' ? 'storage/test-uploads' : 'storage/uploads'),
+    },
   },
   database: {
     autoMigrate: process.env.DB_AUTO_MIGRATE
