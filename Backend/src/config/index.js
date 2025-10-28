@@ -74,6 +74,12 @@ const baseConfig = {
         : path.resolve(process.cwd(), process.env.NODE_ENV === 'test' ? 'storage/test-uploads' : 'storage/uploads'),
     },
   },
+  apiTokens: {
+    prefix: process.env.API_TOKEN_PREFIX || 'gvtok',
+    length: Number(process.env.API_TOKEN_LENGTH || 48),
+    maxPerUser: Number(process.env.API_TOKEN_MAX_PER_USER || 25),
+    defaultExpiryDays: Number(process.env.API_TOKEN_DEFAULT_EXPIRY_DAYS || 0),
+  },
   database: {
     autoMigrate: process.env.DB_AUTO_MIGRATE
       ? process.env.DB_AUTO_MIGRATE === 'true'
