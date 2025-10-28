@@ -220,6 +220,36 @@ module.exports = {
           updated_at: now,
         },
       ]);
+
+      const lobbyNow = new Date();
+      await queryInterface.bulkInsert('networking_lobbies', [
+        {
+          id: require('uuid').v4(),
+          topic: 'Product Pitch Connect',
+          description: 'Five-minute rapid-fire pitches between founders and investors.',
+          duration_minutes: 5,
+          is_paid: false,
+          status: 'open',
+          max_participants: 2,
+          created_by: adminId,
+          metadata: JSON.stringify({ track: 'startup', language: 'en' }),
+          created_at: lobbyNow,
+          updated_at: lobbyNow,
+        },
+        {
+          id: require('uuid').v4(),
+          topic: 'Design Speed Networking',
+          description: 'Two-minute pairing rounds for product and UX designers.',
+          duration_minutes: 2,
+          is_paid: false,
+          status: 'open',
+          max_participants: 2,
+          created_by: adminId,
+          metadata: JSON.stringify({ track: 'design', language: 'en' }),
+          created_at: lobbyNow,
+          updated_at: lobbyNow,
+        },
+      ]);
     }
   },
 
@@ -252,5 +282,8 @@ module.exports = {
       await queryInterface.bulkDelete('tags', { name: ['operations', 'leadership'] });
       await queryInterface.bulkDelete('users', { id: user.id });
     }
+    await queryInterface.bulkDelete('networking_lobbies', null, {});
+    await queryInterface.bulkDelete('profiles', null, {});
+    await queryInterface.bulkDelete('users', { email: 'admin@gigvora.test' }, {});
   },
 };
