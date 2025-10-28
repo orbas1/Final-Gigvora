@@ -2,6 +2,7 @@
 
 const { Model, DataTypes } = require('sequelize');
 const { v4: uuid } = require('uuid');
+const { jsonField } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
   class Agency extends Model {
@@ -44,12 +45,8 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         validate: { isUrl: true },
       },
-      services: {
-        type: DataTypes.JSONB || DataTypes.JSON,
-      },
-      specialties: {
-        type: DataTypes.JSONB || DataTypes.JSON,
-      },
+      services: jsonField(sequelize, DataTypes, 'services', { defaultValue: [] }),
+      specialties: jsonField(sequelize, DataTypes, 'specialties', { defaultValue: [] }),
       location: {
         type: DataTypes.STRING,
       },
@@ -68,12 +65,8 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         validate: { isUrl: true },
       },
-      metadata: {
-        type: DataTypes.JSONB || DataTypes.JSON,
-      },
-      analytics_snapshot: {
-        type: DataTypes.JSONB || DataTypes.JSON,
-      },
+      metadata: jsonField(sequelize, DataTypes, 'metadata'),
+      analytics_snapshot: jsonField(sequelize, DataTypes, 'analytics_snapshot'),
     },
     {
       sequelize,

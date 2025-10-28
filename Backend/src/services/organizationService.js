@@ -6,6 +6,8 @@ const { buildPagination, encodeCursor } = require('../utils/pagination');
 const { createSlug, ensureUniqueSlug } = require('../utils/slug');
 const { aggregateByPeriod } = require('../utils/analytics');
 
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const toArray = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -23,6 +25,8 @@ const parseBoolean = (value) => {
   if (['false', '0', 'no'].includes(normalized)) return false;
   return undefined;
 };
+
+const isUuid = (value) => typeof value === 'string' && uuidRegex.test(value);
 
 const createOrganizationService = ({
   model,
@@ -46,6 +50,91 @@ const createOrganizationService = ({
   const membershipAssociation = Object.values(memberModel.associations || {}).find(
     (association) => association.target === model
   );
+  const managerPrimaryRole = managerRoles.includes('admin')
+    ? 'admin'
+    : managerRoles[0] || defaultMemberRole;
+
+  const ensureUserExists = async (userId, transaction) => {
+    if (!userId) {
+      throw new ApiError(400, 'User id is required', 'VALIDATION_ERROR');
+    }
+    const user = await models.User.findByPk(userId, { transaction });
+    if (!user) {
+      throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+    }
+    if (user.status && user.status !== 'active') {
+      throw new ApiError(400, 'User is not active', 'USER_INACTIVE');
+    }
+    return user;
+  };
+
+  const ensureMemberRecord = async (
+    transaction,
+    orgId,
+    userId,
+    overrides = {},
+    { allowRestore = true, resetRemoval = true } = {}
+  ) => {
+    const existing = await memberModel.findOne({
+      where: { [memberForeignKey]: orgId, user_id: userId },
+      paranoid: false,
+      transaction,
+    });
+
+    const now = new Date();
+    const normalizedRole = overrides.role !== undefined ? overrides.role : defaultMemberRole;
+
+    if (existing) {
+      const deletedAt = existing.get('deleted_at');
+      if (deletedAt) {
+        if (!allowRestore) {
+          throw new ApiError(409, 'Member already exists', 'MEMBER_EXISTS');
+        }
+        await existing.restore({ transaction });
+      } else if (!allowRestore) {
+        throw new ApiError(409, 'Member already exists', 'MEMBER_EXISTS');
+      }
+
+      const updates = {};
+      if (resetRemoval && existing.get('removed_at')) {
+        updates.removed_at = null;
+      }
+
+      if (overrides.role !== undefined && existing.get('role') !== overrides.role) {
+        updates.role = overrides.role;
+      }
+
+      ['title', 'invited_by', 'invited_at', 'joined_at'].forEach((field) => {
+        if (overrides[field] !== undefined && overrides[field] !== existing.get(field)) {
+          updates[field] = overrides[field];
+        }
+      });
+
+      if (Object.keys(updates).length) {
+        await existing.update(updates, { transaction });
+      }
+
+      return existing;
+    }
+
+    const payload = {
+      [memberForeignKey]: orgId,
+      user_id: userId,
+      role: normalizedRole,
+      title: overrides.title,
+      invited_by: overrides.invited_by || userId,
+      invited_at: overrides.invited_at || now,
+      joined_at: overrides.joined_at || now,
+    };
+
+    Object.keys(payload).forEach((key) => {
+      if (payload[key] === undefined) {
+        delete payload[key];
+      }
+    });
+
+    return memberModel.create(payload, { transaction });
+  };
 
   const pickAttributes = (input) =>
     attributeKeys.reduce((acc, key) => {
@@ -60,6 +149,17 @@ const createOrganizationService = ({
     const verified = parseBoolean(query.verified);
     if (verified !== undefined) {
       where.verified = verified;
+    }
+    if (query.slug) {
+      where.slug = query.slug;
+    }
+    const ownerIds = toArray(query.owner_id || query.ownerId);
+    if (ownerIds.length) {
+      where.owner_id = { [Op.in]: ownerIds };
+    }
+    const ids = toArray(query.ids);
+    if (ids.length) {
+      where.id = { [Op.in]: ids };
     }
     if (query.q) {
       const term = `%${query.q.toLowerCase()}%`;
@@ -77,8 +177,17 @@ const createOrganizationService = ({
     return where;
   };
 
-  const resolveOrg = async (id, { includeDeleted = false } = {}) => {
-    const org = await model.findByPk(id, { paranoid: !includeDeleted });
+  const resolveOrg = async (
+    id,
+    { includeDeleted = false, include, transaction } = {}
+  ) => {
+    const where = isUuid(id) ? { id } : { slug: id };
+    const org = await model.findOne({
+      where,
+      paranoid: !includeDeleted,
+      include,
+      transaction,
+    });
     if (!org) {
       throw new ApiError(404, `${analyticsLabel} not found`, `${analyticsLabel.toUpperCase()}_NOT_FOUND`);
     }
@@ -248,10 +357,7 @@ const createOrganizationService = ({
     const includeFlags = new Set(toArray(query.include));
     const paranoid = !(currentUser?.role === 'admin' && includeFlags.has('deleted'));
     const include = buildIncludes(query);
-    const org = await model.findByPk(id, { paranoid, include });
-    if (!org) {
-      throw new ApiError(404, `${analyticsLabel} not found`, `${analyticsLabel.toUpperCase()}_NOT_FOUND`);
-    }
+    const org = await resolveOrg(id, { includeDeleted: !paranoid, include });
     return org.toJSON();
   };
 
@@ -268,13 +374,18 @@ const createOrganizationService = ({
       throw new ApiError(403, 'Only administrators can reassign ownership', 'FORBIDDEN');
     }
 
+    const ownerId = payload.owner_id || currentUser.id;
+    if (ownerId !== currentUser.id) {
+      await ensureUserExists(ownerId);
+    }
+
     return sequelize.transaction(async (transaction) => {
       const slugBase = payload.slug ? createSlug(payload.slug) : createSlug(payload.name);
       const slug = await ensureUniqueSlug(model, slugBase, { transaction });
 
       const data = pickAttributes(payload);
       data.slug = slug;
-      data.owner_id = payload.owner_id || currentUser.id;
+      data.owner_id = ownerId;
 
       if (data.verified) {
         data.verified_at = new Date();
@@ -282,35 +393,20 @@ const createOrganizationService = ({
 
       const org = await model.create(data, { transaction });
 
-      await memberModel.create(
-        {
-          [memberForeignKey]: org.id,
-          user_id: currentUser.id,
-          role: managerRoles.includes('admin') ? 'admin' : defaultMemberRole,
-          joined_at: new Date(),
+      await ensureMemberRecord(transaction, org.id, currentUser.id, {
+        role: managerPrimaryRole,
+        invited_by: currentUser.id,
+        invited_at: new Date(),
+        joined_at: new Date(),
+      });
+
+      if (ownerId !== currentUser.id) {
+        await ensureMemberRecord(transaction, org.id, ownerId, {
+          role: managerPrimaryRole,
           invited_by: currentUser.id,
-        },
-        { transaction }
-      );
-
-      if (payload.owner_id && payload.owner_id !== currentUser.id) {
-        const existingOwnerMembership = await memberModel.findOne({
-          where: { [memberForeignKey]: org.id, user_id: payload.owner_id },
-          transaction,
+          invited_at: new Date(),
+          joined_at: new Date(),
         });
-
-        if (!existingOwnerMembership) {
-          await memberModel.create(
-            {
-              [memberForeignKey]: org.id,
-              user_id: payload.owner_id,
-              role: managerRoles.includes('admin') ? 'admin' : defaultMemberRole,
-              joined_at: new Date(),
-              invited_by: currentUser.id,
-            },
-            { transaction }
-          );
-        }
       }
 
       return org.toJSON();
@@ -323,6 +419,14 @@ const createOrganizationService = ({
 
     if (payload.verified !== undefined && currentUser.role !== 'admin') {
       throw new ApiError(403, 'Only administrators can change verification status', 'FORBIDDEN');
+    }
+
+    const ownerChanged = payload.owner_id && payload.owner_id !== org.owner_id;
+    if (ownerChanged) {
+      if (currentUser.role !== 'admin') {
+        throw new ApiError(403, 'Only administrators can reassign ownership', 'FORBIDDEN');
+      }
+      await ensureUserExists(payload.owner_id);
     }
 
     return sequelize.transaction(async (transaction) => {
@@ -338,10 +442,7 @@ const createOrganizationService = ({
         org.verified = Boolean(payload.verified);
         org.verified_at = payload.verified ? new Date() : null;
       }
-      if (payload.owner_id && payload.owner_id !== org.owner_id) {
-        if (currentUser.role !== 'admin') {
-          throw new ApiError(403, 'Only administrators can reassign ownership', 'FORBIDDEN');
-        }
+      if (ownerChanged) {
         org.owner_id = payload.owner_id;
       }
       const updates = pickAttributes(payload);
@@ -352,6 +453,13 @@ const createOrganizationService = ({
         org.set(key, value);
       });
       await org.save({ transaction });
+
+      if (ownerChanged) {
+        await ensureMemberRecord(transaction, org.id, payload.owner_id, {
+          role: managerPrimaryRole,
+          invited_by: currentUser.id,
+        });
+      }
       return org.toJSON();
     });
   };
@@ -359,7 +467,20 @@ const createOrganizationService = ({
   const remove = async (id, currentUser) => {
     const org = await resolveOrg(id);
     await assertCanManage(org, currentUser, { allowOwner: true });
-    await org.destroy();
+
+    const now = new Date();
+    await sequelize.transaction(async (transaction) => {
+      await memberModel.update(
+        { removed_at: now },
+        {
+          where: { [memberForeignKey]: org.id, removed_at: null },
+          transaction,
+        }
+      );
+
+      await memberModel.destroy({ where: { [memberForeignKey]: org.id }, transaction });
+      await org.destroy({ transaction });
+    });
     return { success: true };
   };
 
@@ -449,54 +570,63 @@ const createOrganizationService = ({
     const org = await resolveOrg(id);
     await assertCanManage(org, currentUser);
 
-    const user = await models.User.findByPk(payload.user_id);
-    if (!user) {
-      throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
-    }
-
-    const existing = await memberModel.findOne({
-      where: { [memberForeignKey]: org.id, user_id: payload.user_id },
-    });
-    if (existing) {
-      throw new ApiError(409, 'Member already exists', 'MEMBER_EXISTS');
-    }
+    await ensureUserExists(payload.user_id);
 
     if (payload.role && !allowedMemberRoles.has(payload.role)) {
       throw new ApiError(400, 'Invalid role supplied', 'VALIDATION_ERROR');
     }
 
-    const parseDate = (value, fallback) => {
-      if (!value) return fallback;
+    const parseDate = (value) => {
+      if (!value) return undefined;
       const candidate = dayjs(value);
-      return candidate.isValid() ? candidate.toDate() : fallback;
+      return candidate.isValid() ? candidate.toDate() : undefined;
     };
 
-    const member = await memberModel.create({
-      [memberForeignKey]: org.id,
-      user_id: payload.user_id,
-      role: payload.role || defaultMemberRole,
-      title: payload.title,
-      invited_by: currentUser.id,
-      invited_at: parseDate(payload.invited_at, new Date()),
-      joined_at: parseDate(payload.joined_at, new Date()),
-    });
+    return sequelize.transaction(async (transaction) => {
+      const existingActive = await memberModel.findOne({
+        where: { [memberForeignKey]: org.id, user_id: payload.user_id },
+        transaction,
+      });
 
-    return memberModel.findByPk(member.id, {
-      include: [
+      if (existingActive) {
+        throw new ApiError(409, 'Member already exists', 'MEMBER_EXISTS');
+      }
+
+      const invitedAt = parseDate(payload.invited_at);
+      const joinedAt = parseDate(payload.joined_at);
+
+      const member = await ensureMemberRecord(
+        transaction,
+        org.id,
+        payload.user_id,
         {
-          model: models.User,
-          as: 'user',
-          attributes: ['id', 'email', 'role', 'is_verified', 'status'],
-          include: [
-            {
-              model: models.Profile,
-              as: 'profile',
-              attributes: ['id', 'display_name', 'headline', 'avatar_url'],
-              required: false,
-            },
-          ],
+          role: payload.role || undefined,
+          title: payload.title,
+          invited_by: currentUser.id,
+          invited_at: invitedAt,
+          joined_at: joinedAt,
         },
-      ],
+        { allowRestore: true }
+      );
+
+      return memberModel.findByPk(member.id, {
+        include: [
+          {
+            model: models.User,
+            as: 'user',
+            attributes: ['id', 'email', 'role', 'is_verified', 'status'],
+            include: [
+              {
+                model: models.Profile,
+                as: 'profile',
+                attributes: ['id', 'display_name', 'headline', 'avatar_url'],
+                required: false,
+              },
+            ],
+          },
+        ],
+        transaction,
+      });
     });
   };
 
@@ -504,16 +634,35 @@ const createOrganizationService = ({
     const org = await resolveOrg(id);
     await assertCanManage(org, currentUser);
 
-    const member = await memberModel.findOne({
-      where: { [memberForeignKey]: org.id, user_id: userId },
-    });
-    if (!member) {
-      throw new ApiError(404, 'Member not found', 'MEMBER_NOT_FOUND');
+    if (String(userId) === String(org.owner_id)) {
+      throw new ApiError(400, 'Owners cannot be removed from their organization', 'CANNOT_REMOVE_OWNER');
     }
 
-    await member.update({ removed_at: new Date() });
-    await member.destroy();
-    return { success: true };
+    return sequelize.transaction(async (transaction) => {
+      const member = await memberModel.findOne({
+        where: { [memberForeignKey]: org.id, user_id: userId },
+        transaction,
+      });
+      if (!member) {
+        throw new ApiError(404, 'Member not found', 'MEMBER_NOT_FOUND');
+      }
+
+      if (managerRoles.includes(member.get('role'))) {
+        const managerCount = await memberModel.count({
+          where: { [memberForeignKey]: org.id, role: { [Op.in]: managerRoles } },
+          transaction,
+        });
+
+        if (managerCount <= 1) {
+          throw new ApiError(400, 'At least one manager must remain assigned', 'LAST_MANAGER_REMOVAL_FORBIDDEN');
+        }
+      }
+
+      const removalTime = new Date();
+      await member.update({ removed_at: removalTime }, { transaction });
+      await member.destroy({ transaction });
+      return { success: true };
+    });
   };
 
   const analyticsProfile = async (id, query, currentUser) => {

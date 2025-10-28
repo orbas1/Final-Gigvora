@@ -3,7 +3,38 @@ const service = require('../services/agencyService');
 const { ApiError } = require('../middleware/errorHandler');
 const { persistIdempotentResponse } = require('../middleware/idempotency');
 
-const flexibleListSchema = Joi.alternatives().try(Joi.array().items(Joi.string()), Joi.object());
+const flexibleListSchema = Joi.alternatives()
+  .try(
+    Joi.array().items(Joi.alternatives(Joi.string(), Joi.number(), Joi.boolean())),
+    Joi.object().pattern(/.*/, Joi.alternatives(Joi.string(), Joi.number(), Joi.array(), Joi.boolean())),
+    Joi.string().allow('', null)
+  )
+  .allow(null);
+
+const normalizeList = (value) => {
+  if (value === undefined) return value;
+  if (value === null) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (item === null || item === undefined ? '' : String(item)))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'object') {
+    return Object.values(value)
+      .flatMap((entry) => (Array.isArray(entry) ? entry : [entry]))
+      .map((entry) => (entry === null || entry === undefined ? '' : String(entry)))
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [String(value).trim()].filter(Boolean);
+};
 
 const createSchema = Joi.object({
   name: Joi.string().min(2).max(255).required(),
@@ -49,6 +80,10 @@ const list = async (req, res, next) => {
 const create = async (req, res, next) => {
   try {
     const payload = validate(createSchema, req.body);
+    const services = normalizeList(payload.services);
+    const specialties = normalizeList(payload.specialties);
+    if (services !== undefined) payload.services = services;
+    if (specialties !== undefined) payload.specialties = specialties;
     const agency = await service.create(payload, req.user);
     await persistIdempotentResponse(req, res, { status: 201, body: agency });
     res.status(201).json(agency);
@@ -69,6 +104,10 @@ const getById = async (req, res, next) => {
 const update = async (req, res, next) => {
   try {
     const payload = validate(updateSchema, req.body);
+    const services = normalizeList(payload.services);
+    const specialties = normalizeList(payload.specialties);
+    if (services !== undefined) payload.services = services;
+    if (specialties !== undefined) payload.specialties = specialties;
     const agency = await service.update(req.params.id, payload, req.user);
     res.json(agency);
   } catch (error) {

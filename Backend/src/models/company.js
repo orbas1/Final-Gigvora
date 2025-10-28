@@ -2,6 +2,7 @@
 
 const { Model, DataTypes } = require('sequelize');
 const { v4: uuid } = require('uuid');
+const { jsonField } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
   class Company extends Model {
@@ -68,12 +69,8 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         validate: { isUrl: true },
       },
-      metadata: {
-        type: DataTypes.JSONB || DataTypes.JSON,
-      },
-      analytics_snapshot: {
-        type: DataTypes.JSONB || DataTypes.JSON,
-      },
+      metadata: jsonField(sequelize, DataTypes, 'metadata'),
+      analytics_snapshot: jsonField(sequelize, DataTypes, 'analytics_snapshot'),
     },
     {
       sequelize,
