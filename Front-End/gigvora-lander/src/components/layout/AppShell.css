@@ -113,21 +113,53 @@
   gap: var(--space-sm);
 }
 
-.profile-card__links a {
-  color: var(--color-brand-600);
+.profile-card__links button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  color: var(--color-brand-700);
   font-weight: 600;
+  border: none;
   border-radius: var(--radius-pill);
-  padding: var(--space-xs) var(--space-sm);
-  background: rgba(42, 115, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(42, 115, 255, 0.12);
+  padding: var(--space-xs) var(--space-md);
+  background: linear-gradient(135deg, rgba(42, 115, 255, 0.12), rgba(42, 115, 255, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(42, 115, 255, 0.16);
+  cursor: pointer;
   transition: transform var(--duration-fast) var(--ease-standard),
-    box-shadow var(--duration-fast) var(--ease-standard);
+    box-shadow var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
 }
 
-.profile-card__links a:hover,
-.profile-card__links a:focus-visible {
+.profile-card__links button span {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.profile-card__links button strong {
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+}
+
+.profile-card__links button:hover,
+.profile-card__links button:focus-visible {
   transform: translateY(-1px);
+  background: linear-gradient(135deg, rgba(42, 115, 255, 0.2), rgba(42, 115, 255, 0.08));
   box-shadow: inset 0 0 0 1px rgba(42, 115, 255, 0.32), 0 12px 30px rgba(16, 63, 166, 0.18);
+}
+
+[data-theme='dark'] .profile-card__links button {
+  background: linear-gradient(135deg, rgba(88, 179, 255, 0.16), rgba(29, 78, 216, 0.12));
+  color: rgba(226, 239, 255, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(88, 179, 255, 0.32);
+}
+
+[data-theme='dark'] .profile-card__links button:hover,
+[data-theme='dark'] .profile-card__links button:focus-visible {
+  background: linear-gradient(135deg, rgba(88, 179, 255, 0.28), rgba(29, 78, 216, 0.18));
+  box-shadow: inset 0 0 0 1px rgba(88, 179, 255, 0.44), 0 12px 30px rgba(8, 24, 56, 0.44);
 }
 
 .metric-stack {

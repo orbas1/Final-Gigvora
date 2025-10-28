@@ -44,6 +44,25 @@ export function Topbar({
 
   const showNav = primaryNavItems.length > 0 && typeof onNavSelect === 'function'
 
+  const MAX_INLINE_NAV_ITEMS = 6
+  const activeIndex = primaryNavItems.findIndex((item) => item.key === activeNav)
+  const initialInline = primaryNavItems.slice(0, MAX_INLINE_NAV_ITEMS)
+  let inlineNavItems = initialInline
+  if (activeIndex >= MAX_INLINE_NAV_ITEMS && primaryNavItems[activeIndex]) {
+    inlineNavItems = [...initialInline.slice(0, MAX_INLINE_NAV_ITEMS - 1), primaryNavItems[activeIndex]]
+  }
+  const inlineKeys = new Set(inlineNavItems.map((item) => item.key))
+  const overflowNavItems = primaryNavItems.filter((item) => !inlineKeys.has(item.key))
+
+  const overflowMenuItems = showNav
+    ? overflowNavItems.map((item) => ({
+        label: item.label,
+        icon: <Icon name={item.icon} size={18} />,
+        badge: item.badge,
+        onSelect: () => onNavSelect(item.key),
+      }))
+    : []
+
   const quickCreateItems = [
     { label: 'Post update', icon: <Icon name="feed" size={18} />, onSelect: () => onCreate('post') },
     { label: 'New project', icon: <Icon name="projects" size={18} />, onSelect: () => onCreate('project') },
@@ -128,7 +147,7 @@ export function Topbar({
       </div>
       {showNav ? (
         <nav className="topbar__nav" aria-label="Primary">
-          {primaryNavItems.map((item) => (
+          {inlineNavItems.map((item) => (
             <button
               key={item.key}
               type="button"
@@ -140,6 +159,18 @@ export function Topbar({
               {item.badge ? <span className="topbar__nav-badge">{item.badge}</span> : null}
             </button>
           ))}
+          {overflowMenuItems.length ? (
+            <PopoverMenu
+              align="end"
+              trigger={({ toggle }) => (
+                <button type="button" className="topbar__nav-overflow" onClick={toggle} aria-haspopup="menu">
+                  <Icon name="more" size={20} />
+                  <span>More</span>
+                </button>
+              )}
+              items={overflowMenuItems}
+            />
+          ) : null}
         </nav>
       ) : null}
       <div className="topbar__actions">
