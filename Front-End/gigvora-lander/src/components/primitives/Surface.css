@@ -1,0 +1,85 @@
+.surface {
+  position: relative;
+  border-radius: var(--radius-xl);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: var(--glass-backdrop);
+  isolation: isolate;
+  overflow: hidden;
+  transition: transform var(--duration-standard) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.surface::before,
+.surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.surface::before {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.35));
+  opacity: 0.92;
+  z-index: -2;
+}
+
+.surface::after {
+  inset: 1px;
+  border-radius: calc(var(--radius-xl) - 1px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  z-index: -1;
+}
+
+[data-theme='dark'] .surface::before {
+  background: linear-gradient(135deg, rgba(16, 24, 40, 0.85), rgba(16, 24, 40, 0.55));
+}
+
+[data-theme='dark'] .surface::after {
+  background: linear-gradient(180deg, rgba(13, 23, 38, 0.82), rgba(13, 23, 38, 0.68));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.surface--md {
+  box-shadow: var(--shadow-md);
+}
+
+.surface--lg {
+  box-shadow: var(--shadow-lg);
+}
+
+.surface--padding-none {
+  padding: 0;
+}
+
+.surface--padding-sm {
+  padding: var(--space-sm);
+}
+
+.surface--padding-md {
+  padding: var(--space-lg);
+}
+
+.surface--padding-lg {
+  padding: var(--space-xl);
+}
+
+.surface--interactive:hover,
+.surface--interactive:focus-within {
+  transform: translateY(-2px);
+  border-color: rgba(42, 115, 255, 0.22);
+  box-shadow: 0 34px 80px rgba(16, 63, 166, 0.18), var(--shadow-glow);
+}
+
+.surface--interactive:hover::before,
+.surface--interactive:focus-within::before {
+  opacity: 1;
+}
+
+[data-theme='dark'] .surface {
+  border-color: rgba(88, 179, 255, 0.12);
+}
