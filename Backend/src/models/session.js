@@ -7,6 +7,7 @@ module.exports = (sequelize) => {
   class Session extends Model {
     static associate(models) {
       this.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
+      this.belongsTo(models.User, { foreignKey: 'impersonated_by', as: 'impersonator' });
     }
   }
 
@@ -22,6 +23,14 @@ module.exports = (sequelize) => {
       refresh_token_hash: DataTypes.STRING,
       expires_at: DataTypes.DATE,
       revoked_at: DataTypes.DATE,
+      impersonated_by: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      impersonated_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       sequelize,
