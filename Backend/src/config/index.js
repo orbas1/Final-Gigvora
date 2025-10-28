@@ -36,6 +36,9 @@ const baseConfig = {
     windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000),
     max: Number(process.env.RATE_LIMIT_MAX || 100),
   },
+  realtime: {
+    messageEditWindowMinutes: Number(process.env.MESSAGE_EDIT_WINDOW_MINUTES || 15),
+  },
   otp: {
     ttlMinutes: Number(process.env.OTP_TTL_MINUTES || 10),
   },
