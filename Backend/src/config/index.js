@@ -36,6 +36,18 @@ const baseConfig = {
     windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000),
     max: Number(process.env.RATE_LIMIT_MAX || 100),
   },
+  verification: {
+    provider: {
+      baseUrl: process.env.VERIFICATION_PROVIDER_URL || '',
+      apiKey: process.env.VERIFICATION_PROVIDER_API_KEY || '',
+      timeoutMs: Number(process.env.VERIFICATION_PROVIDER_TIMEOUT_MS || 10_000),
+    },
+    webhook: {
+      secret: process.env.VERIFICATION_WEBHOOK_SECRET || '',
+    },
+    autoApprove: process.env.VERIFICATION_AUTO_APPROVE
+      ? process.env.VERIFICATION_AUTO_APPROVE === 'true'
+      : false,
   realtime: {
     messageEditWindowMinutes: Number(process.env.MESSAGE_EDIT_WINDOW_MINUTES || 15),
   },
