@@ -1,6 +1,13 @@
 const {
   User,
   Profile,
+  ProfileExperience,
+  ProfileEducation,
+  PortfolioItem,
+  Review,
+  FreelancerProfile,
+  AgencyProfile,
+  CompanyProfile,
   NetworkingLobby,
   NetworkingSession,
   NetworkingSessionParticipant,
@@ -16,6 +23,30 @@ const overview = async ({ from, to }) => {
 
 const listUsers = async () => User.findAll({ limit: 100 });
 
+const RESTORABLE_MODELS = {
+  user: User,
+  profile: Profile,
+  profile_experience: ProfileExperience,
+  profile_education: ProfileEducation,
+  portfolio_item: PortfolioItem,
+  review: Review,
+  freelancer_profile: FreelancerProfile,
+  agency_profile: AgencyProfile,
+  company_profile: CompanyProfile,
+};
+
+const restore = async ({ entity_type, id }) => {
+  const model = RESTORABLE_MODELS[entity_type];
+
+  if (!model || typeof model.restore !== 'function') {
+    throw new ApiError(400, 'Unsupported entity type for restore', 'UNSUPPORTED_ENTITY');
+  }
+
+  const result = await model.restore({ where: { id } });
+  const restoredCount = Array.isArray(result) ? result[0] : result;
+
+  if (!restoredCount) {
+    throw new ApiError(404, 'Entity not found or already active', 'ENTITY_NOT_FOUND');
 const RESTORE_MODELS = {
   user: User,
   profile: Profile,
