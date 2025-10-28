@@ -9,6 +9,8 @@ module.exports = (sequelize) => {
     }
   }
 
+  const jsonType = DataTypes.JSONB || DataTypes.JSON;
+
   UserSetting.init(
     {
       id: {
@@ -21,10 +23,30 @@ module.exports = (sequelize) => {
         allowNull: false,
         unique: true,
       },
-      preferences: DataTypes.JSONB || DataTypes.JSON,
-      security: DataTypes.JSONB || DataTypes.JSON,
-      privacy: DataTypes.JSONB || DataTypes.JSON,
-      theme: DataTypes.JSONB || DataTypes.JSON,
+      account: {
+        type: jsonType,
+        defaultValue: () => ({})
+      },
+      security: {
+        type: jsonType,
+        defaultValue: () => ({})
+      },
+      privacy: {
+        type: jsonType,
+        defaultValue: () => ({})
+      },
+      notifications: {
+        type: jsonType,
+        defaultValue: () => ({})
+      },
+      payments: {
+        type: jsonType,
+        defaultValue: () => ({})
+      },
+      theme: {
+        type: jsonType,
+        defaultValue: () => ({})
+      },
     },
     {
       sequelize,
