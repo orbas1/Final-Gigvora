@@ -1,26 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiRequest } from '../utils/apiClient'
-
-const unwrapList = (payload) => {
-  if (!payload) return []
-  if (Array.isArray(payload)) return payload
-  if (Array.isArray(payload?.data)) return payload.data
-  if (Array.isArray(payload?.items)) return payload.items
-  if (Array.isArray(payload?.results)) return payload.results
-  if (Array.isArray(payload?.rows)) return payload.rows
-  const firstArrayKey = Object.keys(payload).find((key) => Array.isArray(payload[key]))
-  if (firstArrayKey) return payload[firstArrayKey]
-  return []
-}
-
-const toInitials = (name = '') => {
-  const parts = String(name)
-    .split(/\s+/)
-    .filter(Boolean)
-  if (!parts.length) return name.slice(0, 2).toUpperCase()
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
+import {
+  extractNextCursor,
+  normaliseFeedItem,
+  normaliseSuggestionName,
+  toInitials,
+  unwrapList,
+} from '../utils/feedTransforms'
 
 const formatDateLabel = (value) => {
   if (!value) return '—'
@@ -33,58 +19,12 @@ const formatDateLabel = (value) => {
   }
 }
 
-const formatRelativeTime = (value) => {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const diffMs = date.getTime() - Date.now()
-  const diffSeconds = Math.round(diffMs / 1000)
-  const divisions = [
-    { amount: 60, unit: 'second' },
-    { amount: 60, unit: 'minute' },
-    { amount: 24, unit: 'hour' },
-    { amount: 7, unit: 'day' },
-    { amount: 4.34524, unit: 'week' },
-    { amount: 12, unit: 'month' },
-    { amount: Number.POSITIVE_INFINITY, unit: 'year' },
-  ]
-  let duration = diffSeconds
-  for (const division of divisions) {
-    if (Math.abs(duration) < division.amount) {
-      return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(Math.round(duration), division.unit)
-    }
-    duration /= division.amount
-  }
-  return ''
-}
-
 const normaliseNotification = (notification) => ({
   id: notification.id,
   title: notification.title || notification.subject || 'Notification',
   description: notification.description || notification.preview || '',
   read: Boolean(notification.read || notification.read_at),
 })
-
-const normaliseFeedItem = (post) => {
-  const authorProfile = post.author?.profile || post.author?.profile_snapshot || {}
-  const authorName = authorProfile.display_name || post.author?.email || 'Unknown author'
-  return {
-    id: post.id,
-    author: authorName,
-    avatar: toInitials(authorName),
-    avatarUrl: authorProfile.avatar_url || post.author?.avatar_url || null,
-    timestamp: formatRelativeTime(post.created_at || post.published_at),
-    headline: post.title || post.content?.slice(0, 240) || 'Untitled update',
-    media: post.media?.[0]?.url || post.cover_image || null,
-    reactions: Number(post.reaction_count ?? post.metrics?.reactions ?? 0),
-    comments: Number(post.comment_count ?? post.metrics?.comments ?? 0),
-    shares: Number(post.share_count ?? post.metrics?.shares ?? 0),
-    tags: Array.isArray(post.tags) ? post.tags : [],
-  }
-}
-
-const normaliseSuggestionName = (record) =>
-  record.display_name || record.name || record.title || record.headline || record.company?.name || 'Untitled'
 
 const buildOpportunity = (item, type) => {
   const title = normaliseSuggestionName(item)
@@ -217,7 +157,10 @@ export function useDashboardResources(activeRole, options = {}) {
       const connectionsResponse = capture(connectionsResult, 'connections')
 
       const notifications = unwrapList(notificationsResponse).map(normaliseNotification)
-      const feedItems = unwrapList(feedResponse?.data || feedResponse).map(normaliseFeedItem)
+      const feedItems = unwrapList(feedResponse?.data || feedResponse)
+        .map(normaliseFeedItem)
+        .filter(Boolean)
+      const feedCursor = extractNextCursor(feedResponse)
       const metrics = mapMetrics(metricsResponse)
 
       const whoToFollow = unwrapList(peopleResponse).map((item) => ({
@@ -281,6 +224,7 @@ export function useDashboardResources(activeRole, options = {}) {
           opportunities,
         },
         feed: feedItems,
+        feedCursor,
         notifications,
         roles: Array.from(availableRoles).map(normaliseRole),
       }

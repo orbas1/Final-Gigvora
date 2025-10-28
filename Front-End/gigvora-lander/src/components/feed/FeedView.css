@@ -1,0 +1,12 @@
+.feed-view {
+  display: grid;
+  gap: clamp(var(--space-xl), 3vw, var(--space-3xl));
+}
+
+.feed-view__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
