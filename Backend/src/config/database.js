@@ -69,7 +69,7 @@ module.exports = {
   }),
   test: {
     dialect: 'sqlite',
-    storage: process.env.TEST_DB_STORAGE || ':memory:',
+    storage: process.env.TEST_DB_STORAGE || './storage/test.sqlite',
     logging: false,
     ...common,
   },

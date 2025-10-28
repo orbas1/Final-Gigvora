@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class PortfolioItem extends Model {
@@ -23,7 +24,7 @@ module.exports = (sequelize) => {
       title: DataTypes.STRING,
       description: DataTypes.TEXT,
       url: DataTypes.STRING,
-      media: DataTypes.JSONB || DataTypes.JSON,
+      media: jsonColumn(sequelize, DataTypes),
     },
     {
       sequelize,
