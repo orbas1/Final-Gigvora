@@ -1,3 +1,4 @@
+const { User, Profile, Conversation, Message, sequelize } = require('../models');
 const { User, Profile, Connection, sequelize } = require('../models');
 const {
   User,
@@ -72,6 +73,12 @@ const restore = async ({ entity_type, id }) => {
   }
   if (entity_type === 'connection') {
     await Connection.restore({ where: { id } });
+  }
+  if (entity_type === 'conversation') {
+    await Conversation.restore({ where: { id } });
+  }
+  if (entity_type === 'message') {
+    await Message.restore({ where: { id } });
   }
 
   return { success: true };
