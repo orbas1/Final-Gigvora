@@ -3,6 +3,7 @@
 const { Model, DataTypes } = require('sequelize');
 const bcrypt = require('bcrypt');
 const { v4: uuid } = require('uuid');
+const { jsonColumn, enumColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class User extends Model {
@@ -57,6 +58,30 @@ module.exports = (sequelize) => {
       });
       this.hasMany(models.Company, { foreignKey: 'owner_id', as: 'ownedCompanies' });
       this.hasMany(models.Agency, { foreignKey: 'owner_id', as: 'ownedAgencies' });
+      this.belongsToMany(models.Group, {
+        through: models.GroupMember,
+        foreignKey: 'user_id',
+        otherKey: 'group_id',
+        as: 'groups',
+      });
+      this.hasMany(models.GroupMember, { foreignKey: 'user_id', as: 'groupMemberships' });
+      this.hasMany(models.Group, { foreignKey: 'created_by', as: 'ownedGroups' });
+      this.hasMany(models.CalendarEvent, { foreignKey: 'owner_id', as: 'calendarEvents' });
+      this.hasMany(models.CalendarEventParticipant, { foreignKey: 'user_id', as: 'calendarParticipations' });
+      this.hasMany(models.CalendarIntegration, { foreignKey: 'user_id', as: 'calendarIntegrations' });
+      this.hasMany(models.CalendarIcsToken, { foreignKey: 'user_id', as: 'calendarIcsTokens' });
+      this.hasMany(models.ConversationParticipant, {
+        foreignKey: 'user_id',
+        as: 'conversationParticipants',
+      });
+      this.belongsToMany(models.Conversation, {
+        through: models.ConversationParticipant,
+        foreignKey: 'user_id',
+        otherKey: 'conversation_id',
+        as: 'conversations',
+      });
+      this.hasMany(models.Message, { foreignKey: 'sender_id', as: 'messagesSent' });
+      this.hasMany(models.MessageRead, { foreignKey: 'user_id', as: 'messageReads' });
     }
 
     async validatePassword(password) {
@@ -81,11 +106,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
-      role: {
-        type: DataTypes.ENUM('user', 'freelancer', 'client', 'admin'),
+      role: enumColumn(sequelize, DataTypes, ['user', 'freelancer', 'client', 'admin'], {
         allowNull: false,
         defaultValue: 'user',
-      },
+      }),
       active_role: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -110,10 +134,7 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
-      metadata: {
-        type: DataTypes.JSONB || DataTypes.JSON,
-        allowNull: true,
-      },
+      metadata: jsonColumn(sequelize, DataTypes, { allowNull: true }),
     },
     {
       sequelize,

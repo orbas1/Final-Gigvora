@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class IdempotencyKey extends Model {}
@@ -24,7 +25,7 @@ module.exports = (sequelize) => {
       method: DataTypes.STRING,
       path: DataTypes.STRING,
       request_hash: DataTypes.STRING,
-      response_body: DataTypes.JSONB || DataTypes.JSON,
+      response_body: jsonColumn(sequelize, DataTypes),
       response_status: DataTypes.INTEGER,
       locked_at: DataTypes.DATE,
     },
