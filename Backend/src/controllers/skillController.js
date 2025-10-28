@@ -12,6 +12,12 @@ const listSchema = Joi.object({
   analytics: Joi.string(),
 });
 
+const getSchema = Joi.object({
+  include: Joi.string(),
+  expand: Joi.string(),
+  fields: Joi.string(),
+});
+
 const createSchema = Joi.object({
   name: Joi.string().min(2).max(120).required(),
   description: Joi.string().allow('', null),
@@ -32,6 +38,16 @@ const list = async (req, res, next) => {
     const payload = await listSchema.validateAsync(req.query, { abortEarly: false, stripUnknown: true });
     const result = await service.list(payload, req.user);
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const get = async (req, res, next) => {
+  try {
+    const payload = await getSchema.validateAsync(req.query || {}, { abortEarly: false, stripUnknown: true });
+    const skill = await service.getById(req.params.id, payload, req.user);
+    res.json({ data: skill });
   } catch (error) {
     next(error);
   }
@@ -76,4 +92,4 @@ const suggest = async (req, res, next) => {
   }
 };
 
-module.exports = { list, create, update, remove, suggest };
+module.exports = { list, get, create, update, remove, suggest };

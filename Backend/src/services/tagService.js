@@ -1,5 +1,5 @@
 const { Op, fn, col } = require('sequelize');
-const { Tag, Profile, sequelize } = require('../models');
+const { Tag, Profile, ProfileTag, sequelize } = require('../models');
 const { ApiError } = require('../middleware/errorHandler');
 const { buildPagination, encodeCursor } = require('../utils/pagination');
 
@@ -73,12 +73,39 @@ const list = async (query, currentUser) => {
 
   let analytics;
   if (query.analytics === 'true') {
-    const deletedCount = currentUser?.role === 'admin'
-      ? await Tag.count({ where: { ...where, deleted_at: { [Op.ne]: null } }, paranoid: false })
-      : undefined;
+    const [deletedCount, usageRows, attachmentCount] = await Promise.all([
+      currentUser?.role === 'admin'
+        ? Tag.count({ where: { ...where, deleted_at: { [Op.ne]: null } }, paranoid: false })
+        : Promise.resolve(null),
+      ProfileTag.findAll({
+        attributes: ['tag_id', [fn('COUNT', col('*')), 'profiles']],
+        group: ['tag_id'],
+        order: [[fn('COUNT', col('*')), 'DESC']],
+        limit: 5,
+      }),
+      ProfileTag.count(),
+    ]);
+    const tagIds = usageRows.map((row) => row.get('tag_id'));
+    const tagMap = tagIds.length
+      ? await Tag.findAll({
+          attributes: ['id', 'name'],
+          where: { id: tagIds },
+          paranoid: false,
+        })
+      : [];
+    const nameLookup = new Map(tagMap.map((tag) => [tag.id, tag.name]));
     analytics = {
       total,
-      deleted: deletedCount ?? undefined,
+      deleted: deletedCount === null ? undefined : deletedCount,
+      attached_profiles: attachmentCount,
+      top_usage: usageRows.map((row) => {
+        const tagId = row.get('tag_id');
+        return {
+          tag_id: tagId,
+          name: nameLookup.get(tagId) || null,
+          profiles: Number(row.get('profiles')) || 0,
+        };
+      }),
     };
   }
 
@@ -91,6 +118,32 @@ const list = async (query, currentUser) => {
     total,
     analytics,
   };
+};
+
+const getById = async (id, options = {}, currentUser) => {
+  const includes = new Set(parseListParam(options.include));
+  const expand = new Set(parseListParam(options.expand));
+  const fields = parseListParam(options.fields).filter((field) => selectableFields.includes(field));
+
+  const paranoid = !(includes.has('deleted') && currentUser?.role === 'admin');
+
+  const include = [];
+  if (expand.has('profiles')) {
+    include.push({
+      model: Profile,
+      as: 'profiles',
+      attributes: ['id', 'display_name'],
+      through: { attributes: [] },
+    });
+  }
+
+  const attributes = fields.length ? Array.from(new Set([...fields, 'id'])).filter(Boolean) : undefined;
+
+  const tag = await Tag.findByPk(id, { paranoid, include, attributes });
+  if (!tag) {
+    throw new ApiError(404, 'Tag not found', 'TAG_NOT_FOUND');
+  }
+  return serialize(tag);
 };
 
 const create = async (payload) => {
@@ -113,10 +166,17 @@ const update = async (id, payload) => {
   if (!tag) {
     throw new ApiError(404, 'Tag not found', 'TAG_NOT_FOUND');
   }
-  await tag.update({
-    ...(payload.name !== undefined ? { name: payload.name.trim() } : {}),
-    ...(payload.description !== undefined ? { description: payload.description } : {}),
-  });
+  try {
+    await tag.update({
+      ...(payload.name !== undefined ? { name: payload.name.trim() } : {}),
+      ...(payload.description !== undefined ? { description: payload.description } : {}),
+    });
+  } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      throw new ApiError(409, 'Tag already exists', 'TAG_CONFLICT');
+    }
+    throw error;
+  }
   return tag.toJSON();
 };
 
@@ -143,4 +203,4 @@ const suggest = async ({ q, limit = 10 }) => {
   return results.map((row) => row.toJSON());
 };
 
-module.exports = { list, create, update, remove, suggest };
+module.exports = { list, getById, create, update, remove, suggest };

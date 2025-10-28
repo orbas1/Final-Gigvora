@@ -25,7 +25,7 @@ const DEFAULT_PREFERENCES = {
 const list = async (user, query) => {
   const pagination = buildPagination(query, ['created_at', 'updated_at']);
   const includes = new Set(parseListParam(query.include));
-  const selectableFields = ['id', 'type', 'data', 'read_at', 'channel', 'created_at', 'updated_at'];
+  const selectableFields = ['id', 'type', 'data', 'read_at', 'channel', 'created_at', 'updated_at', 'deleted_at'];
   const fields = parseListParam(query.fields).filter((field) => selectableFields.includes(field));
   const paranoid = !(includes.has('deleted') && user.role === 'admin');
 
@@ -128,7 +128,7 @@ const markAllRead = async (userId, { before } = {}) => {
     where.created_at = { [Op.lte]: dayjs(before).toDate() };
   }
   const [updated] = await Notification.update({ read_at: new Date() }, { where });
-  return { updated };
+  return { updated: Number(updated) || 0 };
 };
 
 const loadPreferences = async (userId) => {

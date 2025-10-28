@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const dayjs = require('dayjs');
 const { Op, fn, col } = require('sequelize');
 const config = require('../config');
@@ -31,6 +32,7 @@ const presentFile = (file, { includeUpload = false, includeDownload = false } = 
     metadata: file.metadata || {},
     created_at: file.created_at,
     updated_at: file.updated_at,
+    deleted_at: file.deleted_at || null,
   };
 
   if (includeUpload) {
@@ -91,6 +93,11 @@ const registerFile = async (user, body) => {
         requested_by: user.id,
         checksum: body.checksum || null,
       },
+      lifecycle: {
+        ...(body.metadata?.lifecycle || {}),
+        created_at: new Date().toISOString(),
+        created_by: user.id,
+      },
     },
     status: 'pending',
   });
@@ -125,6 +132,8 @@ const storeFileContent = async ({ fileId, token, buffer, contentType }) => {
   }
 
   await fileStorage.saveBuffer(file.storage_key, contentBuffer);
+  const checksum = crypto.createHash('sha256').update(contentBuffer).digest('hex');
+  const now = new Date().toISOString();
   await file.update({
     mime_type: contentType || file.mime_type || 'application/octet-stream',
     size_bytes: contentBuffer.length,
@@ -133,8 +142,20 @@ const storeFileContent = async ({ fileId, token, buffer, contentType }) => {
       ...(file.metadata || {}),
       upload: {
         ...(file.metadata?.upload || {}),
-        uploaded_at: new Date().toISOString(),
+        uploaded_at: now,
         size_bytes: contentBuffer.length,
+        checksum,
+        uploaded_by: payload.owner,
+      },
+      integrity: {
+        ...(file.metadata?.integrity || {}),
+        sha256: checksum,
+      },
+      storage: {
+        ...(file.metadata?.storage || {}),
+        location: 'local',
+        key: file.storage_key,
+        updated_at: now,
       },
     },
   });
@@ -195,6 +216,15 @@ const streamFile = async ({ fileId, token }) => {
 
 const deleteFile = async (id, user) => {
   const file = await getFileForUser(id, user);
+  const metadata = {
+    ...(file.metadata || {}),
+    lifecycle: {
+      ...(file.metadata?.lifecycle || {}),
+      deleted_at: new Date().toISOString(),
+      deleted_by: user.id,
+    },
+  };
+  await file.update({ metadata });
   await file.destroy();
   return { success: true };
 };
@@ -217,7 +247,7 @@ const storageAnalytics = async ({ owner_id, from, to, includeDeleted }, user) =>
 
   const paranoid = !(includeDeleted === 'true' && user.role === 'admin');
 
-  const [totalBytes, totalFiles, statusRows, seriesRows] = await Promise.all([
+  const [totalBytes, totalFiles, statusRows, seriesRows, deletedCount] = await Promise.all([
     FileAsset.sum('size_bytes', { where, paranoid }).then((value) => value || 0),
     FileAsset.count({ where, paranoid }),
     FileAsset.findAll({
@@ -237,6 +267,7 @@ const storageAnalytics = async ({ owner_id, from, to, includeDeleted }, user) =>
       group: [fn('date', col('created_at'))],
       order: [[fn('date', col('created_at')), 'ASC']],
     }),
+    FileAsset.count({ where: { ...where, deleted_at: { [Op.ne]: null } }, paranoid: false }),
   ]);
 
   const byStatus = statusRows.reduce(
@@ -259,6 +290,7 @@ const storageAnalytics = async ({ owner_id, from, to, includeDeleted }, user) =>
     total_bytes: totalBytes,
     by_status: byStatus,
     series,
+    deleted_files: deletedCount,
     range: {
       from: from ? dayjs(from).toISOString() : null,
       to: to ? dayjs(to).toISOString() : null,
@@ -267,7 +299,7 @@ const storageAnalytics = async ({ owner_id, from, to, includeDeleted }, user) =>
 };
 
 const listFiles = async (query, user) => {
-  const pagination = buildPagination(query, ['created_at', 'updated_at']);
+  const pagination = buildPagination(query, ['created_at', 'updated_at', 'filename', 'size_bytes', 'status']);
   const includes = new Set(parseListParam(query.include));
   const selectableFields = [
     'id',
@@ -281,21 +313,48 @@ const listFiles = async (query, user) => {
     'metadata',
     'created_at',
     'updated_at',
+    'deleted_at',
   ];
-  const baseWhere = { owner_id: user.id };
+  const baseWhere = {};
+  if (user.role !== 'admin' || query.owner_id) {
+    baseWhere.owner_id = query.owner_id && user.role === 'admin' ? query.owner_id : user.id;
+  }
+  const filterWhere = { ...baseWhere };
   if (query.q) {
     const term = `%${String(query.q).toLowerCase()}%`;
-    baseWhere[Op.or] = [
+    filterWhere[Op.or] = [
       sequelize.where(fn('lower', col('FileAsset.filename')), { [Op.like]: term }),
       sequelize.where(fn('lower', col('FileAsset.mime_type')), { [Op.like]: term }),
     ];
   }
 
-  const where = { ...baseWhere };
+  const statuses = parseListParam(query.status).filter((status) => ['pending', 'ready', 'blocked'].includes(status));
+  if (statuses.length) {
+    filterWhere.status = statuses.length === 1 ? statuses[0] : { [Op.in]: statuses };
+  }
+
+  if (query.from || query.to) {
+    const range = {};
+    if (query.from) {
+      range[Op.gte] = dayjs(query.from).toDate();
+    }
+    if (query.to) {
+      range[Op.lte] = dayjs(query.to).toDate();
+    }
+    filterWhere.created_at = range;
+  }
+
+  const where = { ...filterWhere };
   if (pagination.cursorValue !== undefined) {
-    where[pagination.sortField] = {
-      [pagination.cursorOperator]: pagination.cursorValue,
-    };
+    const existingValue = filterWhere[pagination.sortField];
+    if (existingValue && typeof existingValue === 'object' && !Array.isArray(existingValue)) {
+      where[pagination.sortField] = {
+        ...existingValue,
+        [pagination.cursorOperator]: pagination.cursorValue,
+      };
+    } else {
+      where[pagination.sortField] = { [pagination.cursorOperator]: pagination.cursorValue };
+    }
   }
 
   const fields = parseListParam(query.fields).filter((field) => selectableFields.includes(field));
@@ -316,17 +375,38 @@ const listFiles = async (query, user) => {
   const data = sliced.map((row) => presentFile(row, { includeDownload: true }));
   const nextCursorValue = hasMore ? sliced[sliced.length - 1]?.[pagination.sortField] : undefined;
 
-  const total = await FileAsset.count({ where: baseWhere, paranoid });
+  const total = await FileAsset.count({ where: filterWhere, paranoid });
 
   let analytics;
   if (query.analytics === 'true') {
-    const [totalBytes, ready] = await Promise.all([
-      FileAsset.sum('size_bytes', { where: baseWhere, paranoid }),
-      FileAsset.count({ where: { ...baseWhere, status: 'ready' }, paranoid }),
+    const analyticsWhere = { ...filterWhere };
+    const includeDeletedSummary = includes.has('deleted') || user.role === 'admin';
+    const [totalBytes, statusRows, deletedTotal] = await Promise.all([
+      FileAsset.sum('size_bytes', { where: analyticsWhere, paranoid }),
+      FileAsset.findAll({
+        attributes: ['status', [fn('COUNT', col('*')), 'count']],
+        where: analyticsWhere,
+        paranoid,
+        group: ['status'],
+      }),
+      includeDeletedSummary
+        ? FileAsset.count({
+            where: { ...filterWhere, deleted_at: { [Op.ne]: null } },
+            paranoid: false,
+          })
+        : Promise.resolve(null),
     ]);
+    const byStatus = statusRows.reduce(
+      (acc, row) => ({
+        ...acc,
+        [row.status || 'unknown']: Number(row.get('count')) || 0,
+      }),
+      { pending: 0, ready: 0, blocked: 0 }
+    );
     analytics = {
-      total_bytes: totalBytes || 0,
-      ready_files: ready,
+      total_bytes: Number(totalBytes) || 0,
+      by_status: byStatus,
+      deleted: deletedTotal === null ? undefined : deletedTotal || 0,
     };
   }
 

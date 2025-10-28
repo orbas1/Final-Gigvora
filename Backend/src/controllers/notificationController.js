@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { ApiError } = require('../middleware/errorHandler');
 const service = require('../services/notificationService');
 
 const listSchema = Joi.object({
@@ -73,7 +74,10 @@ const updatePreferences = async (req, res, next) => {
 
 const analytics = async (req, res, next) => {
   try {
-    const payload = await analyticsSchema.validateAsync(req.query);
+    if (req.user?.role !== 'admin') {
+      throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+    }
+    const payload = await analyticsSchema.validateAsync(req.query, { abortEarly: false, stripUnknown: true });
     const result = await service.deliveryAnalytics(payload);
     res.json(result);
   } catch (error) {

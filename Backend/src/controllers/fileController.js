@@ -27,6 +27,10 @@ const listSchema = Joi.object({
   include: Joi.string(),
   expand: Joi.string(),
   analytics: Joi.string(),
+  owner_id: Joi.string().uuid(),
+  status: Joi.string(),
+  from: Joi.date(),
+  to: Joi.date(),
 });
 
 const tokenSchema = Joi.object({ token: Joi.string().required() });

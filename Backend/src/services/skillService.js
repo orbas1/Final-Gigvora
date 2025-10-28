@@ -1,5 +1,5 @@
 const { Op, fn, col } = require('sequelize');
-const { Skill, Profile, sequelize } = require('../models');
+const { Skill, Profile, ProfileSkill, sequelize } = require('../models');
 const { ApiError } = require('../middleware/errorHandler');
 const { buildPagination, encodeCursor } = require('../utils/pagination');
 
@@ -73,12 +73,39 @@ const list = async (query, currentUser) => {
 
   let analytics;
   if (query.analytics === 'true') {
-    const deletedCount = currentUser?.role === 'admin'
-      ? await Skill.count({ where: { ...where, deleted_at: { [Op.ne]: null } }, paranoid: false })
-      : undefined;
+    const [deletedCount, usageRows, attachmentCount] = await Promise.all([
+      currentUser?.role === 'admin'
+        ? Skill.count({ where: { ...where, deleted_at: { [Op.ne]: null } }, paranoid: false })
+        : Promise.resolve(null),
+      ProfileSkill.findAll({
+        attributes: ['skill_id', [fn('COUNT', col('*')), 'profiles']],
+        group: ['skill_id'],
+        order: [[fn('COUNT', col('*')), 'DESC']],
+        limit: 5,
+      }),
+      ProfileSkill.count(),
+    ]);
+    const skillIds = usageRows.map((row) => row.get('skill_id'));
+    const skillMap = skillIds.length
+      ? await Skill.findAll({
+          attributes: ['id', 'name'],
+          where: { id: skillIds },
+          paranoid: false,
+        })
+      : [];
+    const nameLookup = new Map(skillMap.map((skill) => [skill.id, skill.name]));
     analytics = {
       total,
-      deleted: deletedCount ?? undefined,
+      deleted: deletedCount === null ? undefined : deletedCount,
+      attached_profiles: attachmentCount,
+      top_usage: usageRows.map((row) => {
+        const skillId = row.get('skill_id');
+        return {
+          skill_id: skillId,
+          name: nameLookup.get(skillId) || null,
+          profiles: Number(row.get('profiles')) || 0,
+        };
+      }),
     };
   }
 
@@ -91,6 +118,32 @@ const list = async (query, currentUser) => {
     total,
     analytics,
   };
+};
+
+const getById = async (id, options = {}, currentUser) => {
+  const includes = new Set(parseListParam(options.include));
+  const expand = new Set(parseListParam(options.expand));
+  const fields = parseListParam(options.fields).filter((field) => selectableFields.includes(field));
+
+  const paranoid = !(includes.has('deleted') && currentUser?.role === 'admin');
+
+  const include = [];
+  if (expand.has('profiles')) {
+    include.push({
+      model: Profile,
+      as: 'profiles',
+      attributes: ['id', 'display_name'],
+      through: { attributes: [] },
+    });
+  }
+
+  const attributes = fields.length ? Array.from(new Set([...fields, 'id'])).filter(Boolean) : undefined;
+
+  const skill = await Skill.findByPk(id, { paranoid, include, attributes });
+  if (!skill) {
+    throw new ApiError(404, 'Skill not found', 'SKILL_NOT_FOUND');
+  }
+  return serialize(skill);
 };
 
 const create = async (payload) => {
@@ -113,10 +166,17 @@ const update = async (id, payload) => {
   if (!skill) {
     throw new ApiError(404, 'Skill not found', 'SKILL_NOT_FOUND');
   }
-  await skill.update({
-    ...(payload.name !== undefined ? { name: payload.name.trim() } : {}),
-    ...(payload.description !== undefined ? { description: payload.description } : {}),
-  });
+  try {
+    await skill.update({
+      ...(payload.name !== undefined ? { name: payload.name.trim() } : {}),
+      ...(payload.description !== undefined ? { description: payload.description } : {}),
+    });
+  } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      throw new ApiError(409, 'Skill already exists', 'SKILL_CONFLICT');
+    }
+    throw error;
+  }
   return skill.toJSON();
 };
 
@@ -143,4 +203,4 @@ const suggest = async ({ q, limit = 10 }) => {
   return results.map((row) => row.toJSON());
 };
 
-module.exports = { list, create, update, remove, suggest };
+module.exports = { list, getById, create, update, remove, suggest };
