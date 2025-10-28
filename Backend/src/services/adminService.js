@@ -83,6 +83,72 @@ const applyDateFilter = (where, from, to, field = 'created_at') => {
   return { ...where, [field]: range };
 };
 
+const sanitizeFields = (fields) => {
+  if (!fields || !fields.length) return undefined;
+  const allowed = fields.filter((field) => /^[a-zA-Z0-9_]+$/.test(field));
+  const unique = Array.from(new Set(allowed));
+  if (!unique.includes('id')) {
+    unique.push('id');
+  }
+  return unique;
+};
+
+const buildIncludes = (baseIncludes = [], expand = [], map = {}) => {
+  const includes = [...baseIncludes];
+  if (!expand || !expand.length) {
+    return includes;
+  }
+  const seen = new Set(includes.map((item) => item.as || item.model?.name));
+  expand.forEach((key) => {
+    const entry = map[key];
+    if (!entry) return;
+    const include = typeof entry === 'function' ? entry() : entry;
+    const alias = include.as || include.model?.name;
+    if (!seen.has(alias)) {
+      includes.push(include);
+      if (alias) {
+        seen.add(alias);
+      }
+    }
+  });
+  return includes;
+};
+
+const ensureBudgetRange = (min, max) => {
+  if (min !== undefined && max !== undefined && Number(min) > Number(max)) {
+    throw new ApiError(400, 'budget_min cannot exceed budget_max', 'INVALID_JOB_BUDGET');
+  }
+};
+
+const slugifyValue = (value) => {
+  if (!value) return '';
+  return value
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+};
+
+const ensureOrganizationSlug = async (value, transaction, excludeId) => {
+  const base = slugifyValue(value) || 'organization';
+  let candidate = base;
+  let counter = 1;
+  const whereBase = excludeId ? { id: { [Op.ne]: excludeId } } : {};
+  while (
+    await Organization.findOne({
+      where: { ...whereBase, slug: candidate },
+      paranoid: false,
+      transaction,
+    })
+  ) {
+    candidate = `${base}-${counter++}`;
+  }
+  return candidate;
+};
+
 const overview = async ({ from, to }) => {
   const whereRange = applyDateFilter({}, from, to);
   const [totalUsers, verifiedUsers, activeUsers] = await Promise.all([
@@ -135,11 +201,22 @@ const overview = async ({ from, to }) => {
   };
 };
 
-const listUsers = async ({ limit, cursor, sort, q, role, status, includeDeleted, analytics }) => {
+const listUsers = async ({ limit, cursor, sort, q, role, status, includeDeleted, analytics, fields, expand }) => {
   const where = {};
   if (role) where.role = role;
   if (status) where.status = status;
-  const include = [{ model: Profile, as: 'profile', attributes: ['display_name', 'headline', 'location'] }];
+  const attributes = sanitizeFields(fields);
+  const baseInclude = [{ model: Profile, as: 'profile', attributes: ['display_name', 'headline', 'location'] }];
+  const include = buildIncludes(baseInclude, expand, {
+    organization: { model: Organization, as: 'organization', attributes: ['id', 'name', 'slug', 'status'] },
+    sessions: () => ({
+      model: Session,
+      as: 'sessions',
+      attributes: ['id', 'ip_address', 'user_agent', 'expires_at'],
+      limit: 5,
+      order: [['created_at', 'DESC']],
+    }),
+  });
   if (q) {
     Object.assign(where, buildSearchPredicate(q, ['User.email', 'profile.display_name']));
   }
@@ -152,12 +229,13 @@ const listUsers = async ({ limit, cursor, sort, q, role, status, includeDeleted,
     cursor,
     order,
     paranoid: !includeDeleted,
+    attributes,
   });
 
   let analyticsPayload;
   if (analytics) {
     const statusCounts = await User.count({
-      where: { status: { [Op.not]: null } },
+      where: { ...where, status: { [Op.not]: null } },
       group: ['status'],
       paranoid: !includeDeleted,
     });
@@ -166,7 +244,7 @@ const listUsers = async ({ limit, cursor, sort, q, role, status, includeDeleted,
       by_status: Array.isArray(statusCounts)
         ? statusCounts.map((entry) => ({ status: entry.status, count: Number(entry.count) }))
         : [],
-      verified: await User.count({ where: { is_verified: true }, paranoid: !includeDeleted }),
+      verified: await User.count({ where: { ...where, is_verified: true }, paranoid: !includeDeleted }),
     };
   }
 
@@ -184,17 +262,53 @@ const updateUser = async (id, body, actorId) => {
   }
 
   const updates = {};
-  if (body.status) updates.status = body.status;
-  if (typeof body.is_verified === 'boolean') updates.is_verified = body.is_verified;
-  if (body.role) updates.role = body.role;
-  if (body.password) updates.password_hash = body.password;
+  if (body.email) {
+    user.email = body.email;
+    updates.email = body.email;
+  }
+  if (body.status) {
+    user.status = body.status;
+    updates.status = body.status;
+  }
+  if (typeof body.is_verified === 'boolean') {
+    user.is_verified = body.is_verified;
+    updates.is_verified = body.is_verified;
+  }
+  if (body.role) {
+    user.role = body.role;
+    updates.role = body.role;
+  }
+  if (body.password) {
+    user.password_hash = body.password;
+    updates.password_changed = true;
+  }
+  if (body.org_id !== undefined) {
+    if (body.org_id) {
+      const organization = await Organization.findByPk(body.org_id);
+      if (!organization) {
+        throw new ApiError(400, 'Organization not found', 'ORG_NOT_FOUND');
+      }
+    }
+    user.org_id = body.org_id || null;
+    updates.org_id = body.org_id;
+  }
+  if (body.metadata) {
+    user.metadata = body.metadata;
+    updates.metadata = body.metadata;
+  }
 
   if (Object.keys(updates).length === 0) {
     throw new ApiError(400, 'No valid fields to update', 'NO_CHANGES');
   }
 
-  Object.assign(user, updates);
-  await user.save();
+  try {
+    await user.save();
+  } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      throw new ApiError(409, 'Email already exists', 'EMAIL_IN_USE');
+    }
+    throw error;
+  }
 
   await AuditLog.create({
     actor_id: actorId,
@@ -206,6 +320,84 @@ const updateUser = async (id, body, actorId) => {
   });
 
   return user.get({ plain: true });
+};
+
+const createUser = async (payload, actorId) => {
+  try {
+    const id = await sequelize.transaction(async (transaction) => {
+      if (payload.org_id) {
+        const organization = await Organization.findByPk(payload.org_id, { transaction, paranoid: false });
+        if (!organization || organization.deleted_at) {
+          throw new ApiError(400, 'Organization not available', 'ORG_NOT_FOUND');
+        }
+      }
+
+      const user = await User.create(
+        {
+          email: payload.email,
+          password_hash: payload.password,
+          role: payload.role || 'user',
+          status: payload.status || 'active',
+          is_verified: payload.is_verified ?? false,
+          org_id: payload.org_id,
+          metadata: payload.metadata,
+        },
+        { transaction }
+      );
+
+      if (payload.profile) {
+        await Profile.create(
+          {
+            user_id: user.id,
+            display_name: payload.profile.display_name,
+            headline: payload.profile.headline,
+            bio: payload.profile.bio,
+            location: payload.profile.location,
+            avatar_url: payload.profile.avatar_url,
+            banner_url: payload.profile.banner_url,
+            socials: payload.profile.socials,
+            hourly_rate: payload.profile.hourly_rate,
+            currency: payload.profile.currency,
+          },
+          { transaction }
+        );
+      }
+
+      await AuditLog.create(
+        {
+          actor_id: actorId,
+          actor_type: 'user',
+          entity_type: 'user',
+          entity_id: user.id,
+          action: 'user.create',
+          metadata: {
+            email: payload.email,
+            role: payload.role || 'user',
+            org_id: payload.org_id,
+            profile_created: Boolean(payload.profile),
+          },
+        },
+        { transaction }
+      );
+
+      return user.id;
+    });
+
+    const created = await User.findByPk(id, {
+      include: [
+        { model: Profile, as: 'profile', attributes: ['display_name', 'headline', 'location', 'bio', 'avatar_url', 'banner_url'] },
+        { model: Organization, as: 'organization', attributes: ['id', 'name', 'slug', 'status'] },
+      ],
+      paranoid: false,
+    });
+
+    return created.get({ plain: true });
+  } catch (error) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      throw new ApiError(409, 'Email already exists', 'EMAIL_IN_USE');
+    }
+    throw error;
+  }
 };
 
 const impersonateUser = async ({
@@ -243,30 +435,85 @@ const impersonateUser = async ({
   };
 };
 
-const listOrganizations = async ({ limit, cursor, sort, q, status, includeDeleted, analytics }) => {
+const getUser = async (id, { includeDeleted, expand } = {}) => {
+  const include = buildIncludes(
+    [{ model: Profile, as: 'profile', attributes: ['display_name', 'headline', 'location', 'bio', 'avatar_url', 'banner_url'] }],
+    expand,
+    {
+      organization: { model: Organization, as: 'organization', attributes: ['id', 'name', 'slug', 'status'] },
+      sessions: () => ({
+        model: Session,
+        as: 'sessions',
+        attributes: ['id', 'ip_address', 'user_agent', 'expires_at'],
+        limit: 10,
+        order: [['created_at', 'DESC']],
+      }),
+    }
+  );
+
+  const user = await User.findByPk(id, { include, paranoid: !includeDeleted });
+  if (!user) {
+    throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+  return user.get({ plain: true });
+};
+
+const deleteUser = async (id, actorId) => {
+  const user = await User.findByPk(id);
+  if (!user) {
+    throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  if (user.status !== 'deleted') {
+    user.status = 'deleted';
+    await user.save();
+  }
+
+  await user.destroy();
+
+  await AuditLog.create({
+    actor_id: actorId,
+    actor_type: 'user',
+    entity_type: 'user',
+    entity_id: user.id,
+    action: 'user.delete',
+    metadata: { status: 'deleted' },
+  });
+
+  return { success: true };
+};
+
+const listOrganizations = async ({ limit, cursor, sort, q, status, includeDeleted, analytics, fields, expand }) => {
   const where = {};
   if (status) where.status = status;
   if (q) Object.assign(where, buildSearchPredicate(q, ['Organization.name', 'Organization.slug']));
 
+  const attributes = sanitizeFields(fields);
+  const baseInclude = [{ model: User, as: 'owner', attributes: ['id', 'email', 'role'] }];
+  const include = buildIncludes(baseInclude, expand, {
+    jobs: { model: Job, as: 'jobs', attributes: ['id', 'title', 'status', 'is_sponsored'] },
+  });
+
   const { rows, count, nextCursor } = await paginate(Organization, {
     where,
-    include: [{ model: User, as: 'owner', attributes: ['id', 'email', 'role'] }],
+    include,
     limit,
     cursor,
     order: buildOrder(sort),
     paranoid: !includeDeleted,
+    attributes,
   });
 
   let analyticsPayload;
   if (analytics) {
     const statusCounts = await Organization.count({
-      where: { status: { [Op.not]: null } },
+      where: { ...where, status: { [Op.not]: null } },
       group: ['status'],
       paranoid: !includeDeleted,
     });
     analyticsPayload = {
       total: count,
-      verified: await Organization.count({ where: { verified_at: { [Op.not]: null } }, paranoid: !includeDeleted }),
+      verified: await Organization.count({ where: { ...where, verified_at: { [Op.not]: null } }, paranoid: !includeDeleted }),
       by_status: Array.isArray(statusCounts)
         ? statusCounts.map((entry) => ({ status: entry.status, count: Number(entry.count) }))
         : [],
@@ -278,6 +525,62 @@ const listOrganizations = async ({ limit, cursor, sort, q, status, includeDelete
     pagination: { next_cursor: nextCursor },
     analytics: analyticsPayload,
   };
+};
+
+const createOrganization = async (payload, actorId) => {
+  const id = await sequelize.transaction(async (transaction) => {
+    const owner = payload.owner_id
+      ? await User.findByPk(payload.owner_id, { transaction, paranoid: false })
+      : null;
+    if (payload.owner_id && !owner) {
+      throw new ApiError(400, 'Owner not found', 'OWNER_NOT_FOUND');
+    }
+    if (owner?.deleted_at) {
+      throw new ApiError(400, 'Owner is not active', 'OWNER_NOT_AVAILABLE');
+    }
+
+    const slug = await ensureOrganizationSlug(payload.slug || payload.name, transaction);
+    const organization = await Organization.create(
+      {
+        name: payload.name,
+        slug,
+        type: payload.type,
+        owner_id: payload.owner_id,
+        status: payload.status || 'active',
+        metadata: payload.metadata,
+      },
+      { transaction }
+    );
+
+    if (owner) {
+      owner.org_id = organization.id;
+      await owner.save({ transaction });
+    }
+
+    await AuditLog.create(
+      {
+        actor_id: actorId,
+        actor_type: 'user',
+        entity_type: 'organization',
+        entity_id: organization.id,
+        action: 'organization.create',
+        metadata: {
+          owner_id: payload.owner_id,
+          status: payload.status || 'active',
+        },
+      },
+      { transaction }
+    );
+
+    return organization.id;
+  });
+
+  const created = await Organization.findByPk(id, {
+    include: [{ model: User, as: 'owner', attributes: ['id', 'email', 'role'] }],
+    paranoid: false,
+  });
+
+  return created.get({ plain: true });
 };
 
 const updateOrganization = async (id, body, actorId) => {
@@ -295,7 +598,23 @@ const updateOrganization = async (id, body, actorId) => {
   if (body.status) {
     organization.status = body.status;
   }
+  if (body.name) {
+    organization.name = body.name;
+  }
+  if (body.type) {
+    organization.type = body.type;
+  }
+  if (body.metadata) {
+    organization.metadata = body.metadata;
+  }
+  if (body.slug) {
+    organization.slug = await ensureOrganizationSlug(body.slug, undefined, organization.id);
+  }
   if (body.merge_into_id) {
+    const target = await Organization.findByPk(body.merge_into_id, { paranoid: false });
+    if (!target) {
+      throw new ApiError(400, 'Merge target not found', 'MERGE_TARGET_NOT_FOUND');
+    }
     organization.merged_into_id = body.merge_into_id;
   }
 
@@ -313,23 +632,67 @@ const updateOrganization = async (id, body, actorId) => {
   return organization.get({ plain: true });
 };
 
-const listReports = async ({ limit, cursor, sort, status, subjectType, analytics }) => {
+const getOrganization = async (id, { includeDeleted, expand } = {}) => {
+  const include = buildIncludes(
+    [{ model: User, as: 'owner', attributes: ['id', 'email', 'role'] }],
+    expand,
+    {
+      jobs: { model: Job, as: 'jobs', attributes: ['id', 'title', 'status', 'is_sponsored'] },
+    }
+  );
+
+  const organization = await Organization.findByPk(id, { include, paranoid: !includeDeleted });
+  if (!organization) {
+    throw new ApiError(404, 'Organization not found', 'ORG_NOT_FOUND');
+  }
+  return organization.get({ plain: true });
+};
+
+const deleteOrganization = async (id, actorId) => {
+  const organization = await Organization.findByPk(id);
+  if (!organization) {
+    throw new ApiError(404, 'Organization not found', 'ORG_NOT_FOUND');
+  }
+
+  await organization.destroy();
+
+  await AuditLog.create({
+    actor_id: actorId,
+    actor_type: 'user',
+    entity_type: 'organization',
+    entity_id: organization.id,
+    action: 'organization.delete',
+    metadata: { status: 'deleted' },
+  });
+
+  return { success: true };
+};
+
+const listReports = async ({ limit, cursor, sort, status, subjectType, analytics, fields, expand }) => {
   const where = {};
   if (status) where.status = status;
   if (subjectType) where.subject_type = subjectType;
 
+  const attributes = sanitizeFields(fields);
+  const include = buildIncludes(
+    [{ model: User, as: 'reporter', attributes: ['id', 'email'] }],
+    expand,
+    {}
+  );
+
   const { rows, count, nextCursor } = await paginate(ContentReport, {
     where,
-    include: [{ model: User, as: 'reporter', attributes: ['id', 'email'] }],
+    include,
     limit,
     cursor,
     order: buildOrder(sort),
+    attributes,
   });
 
   let analyticsPayload;
   if (analytics) {
     const statusCounts = await ContentReport.count({
-      where: { status: { [Op.not]: null } },
+      where: { ...where, status: { [Op.not]: null } },
       group: ['status'],
     });
     analyticsPayload = {
@@ -392,26 +755,31 @@ const updateMarketplaceConfig = async (payload, actorId) => {
   return current.get({ plain: true });
 };
 
-const listJobs = async ({ limit, cursor, sort, status, org_id, analytics, includeDeleted }) => {
+const listJobs = async ({ limit, cursor, sort, status, org_id, analytics, includeDeleted, fields, expand }) => {
   const where = {};
   if (status) where.status = status;
   if (org_id) where.org_id = org_id;
 
+  const attributes = sanitizeFields(fields);
+  const baseInclude = [{ model: Organization, as: 'organization', attributes: ['id', 'name', 'slug'] }];
+  const include = buildIncludes(baseInclude, expand, {});
+
   const { rows, count, nextCursor } = await paginate(Job, {
     where,
-    include: [{ model: Organization, as: 'organization', attributes: ['id', 'name', 'slug'] }],
+    include,
     limit,
     cursor,
     order: buildOrder(sort),
     paranoid: !includeDeleted,
+    attributes,
   });
 
   let analyticsPayload;
   if (analytics) {
     analyticsPayload = {
       total: count,
-      sponsored: await Job.count({ where: { is_sponsored: true }, paranoid: !includeDeleted }),
-      hidden: await Job.count({ where: { is_hidden: true }, paranoid: !includeDeleted }),
+      sponsored: await Job.count({ where: { ...where, is_sponsored: true }, paranoid: !includeDeleted }),
+      hidden: await Job.count({ where: { ...where, is_hidden: true }, paranoid: !includeDeleted }),
     };
   }
 
@@ -431,6 +799,18 @@ const updateJob = async (id, body, actorId) => {
   if (typeof body.is_sponsored === 'boolean') job.is_sponsored = body.is_sponsored;
   if (typeof body.is_hidden === 'boolean') job.is_hidden = body.is_hidden;
   if (body.status) job.status = body.status;
+  if (body.title) job.title = body.title;
+  if (body.description !== undefined) job.description = body.description;
+  if (body.budget_min !== undefined) job.budget_min = body.budget_min;
+  if (body.budget_max !== undefined) job.budget_max = body.budget_max;
+  if (body.currency) job.currency = body.currency;
+  if (body.metadata) job.metadata = body.metadata;
+  if (body.published_at !== undefined) job.published_at = body.published_at;
+
+  ensureBudgetRange(job.budget_min, job.budget_max);
+  if (job.status === 'open' && !job.published_at) {
+    job.published_at = new Date();
+  }
   await job.save();
 
   await AuditLog.create({
@@ -445,7 +825,91 @@ const updateJob = async (id, body, actorId) => {
   return job.get({ plain: true });
 };
 
-const listLedger = async ({ limit, cursor, sort, type, status, user_id, org_id, from, to, analytics }) => {
+const createJob = async (payload, actorId) => {
+  ensureBudgetRange(payload.budget_min, payload.budget_max);
+
+  const id = await sequelize.transaction(async (transaction) => {
+    const organization = await Organization.findByPk(payload.org_id, { transaction, paranoid: false });
+    if (!organization || organization.deleted_at) {
+      throw new ApiError(404, 'Organization not found', 'ORG_NOT_FOUND');
+    }
+
+    const publishedAt = payload.published_at ?? (payload.status === 'open' ? new Date() : null);
+    const job = await Job.create(
+      {
+        org_id: payload.org_id,
+        title: payload.title,
+        description: payload.description,
+        status: payload.status || 'draft',
+        is_sponsored: payload.is_sponsored ?? false,
+        is_hidden: payload.is_hidden ?? false,
+        budget_min: payload.budget_min,
+        budget_max: payload.budget_max,
+        currency: payload.currency,
+        metadata: payload.metadata,
+        published_at: publishedAt,
+      },
+      { transaction }
+    );
+
+    await AuditLog.create(
+      {
+        actor_id: actorId,
+        actor_type: 'user',
+        entity_type: 'job',
+        entity_id: job.id,
+        action: 'job.create',
+        metadata: { org_id: payload.org_id, status: payload.status || 'draft' },
+      },
+      { transaction }
+    );
+
+    return job.id;
+  });
+
+  const job = await Job.findByPk(id, {
+    include: [{ model: Organization, as: 'organization', attributes: ['id', 'name', 'slug'] }],
+    paranoid: false,
+  });
+
+  return job.get({ plain: true });
+};
+
+const getJob = async (id, { includeDeleted, expand } = {}) => {
+  const include = buildIncludes(
+    [{ model: Organization, as: 'organization', attributes: ['id', 'name', 'slug'] }],
+    expand,
+    {}
+  );
+
+  const job = await Job.findByPk(id, { include, paranoid: !includeDeleted });
+  if (!job) {
+    throw new ApiError(404, 'Job not found', 'JOB_NOT_FOUND');
+  }
+  return job.get({ plain: true });
+};
+
+const deleteJob = async (id, actorId) => {
+  const job = await Job.findByPk(id);
+  if (!job) {
+    throw new ApiError(404, 'Job not found', 'JOB_NOT_FOUND');
+  }
+
+  await job.destroy();
+
+  await AuditLog.create({
+    actor_id: actorId,
+    actor_type: 'user',
+    entity_type: 'job',
+    entity_id: job.id,
+    action: 'job.delete',
+    metadata: { status: 'deleted' },
+  });
+
+  return { success: true };
+};
+
+const listLedger = async ({ limit, cursor, sort, type, status, user_id, org_id, from, to, analytics, fields, expand }) => {
   const where = {};
   if (type) where.type = type;
   if (status) where.status = status;
@@ -453,15 +917,23 @@ const listLedger = async ({ limit, cursor, sort, type, status, user_id, org_id, 
   if (org_id) where.org_id = org_id;
   Object.assign(where, applyDateFilter({}, from, to, 'occurred_at'));
 
-  const { rows, count, nextCursor } = await paginate(PaymentTransaction, {
-    where,
-    include: [
+  const attributes = sanitizeFields(fields);
+  const include = buildIncludes(
+    [
       { model: User, as: 'user', attributes: ['id', 'email'] },
       { model: Organization, as: 'organization', attributes: ['id', 'name'] },
     ],
+    expand,
+    {}
+  );
+
+  const { rows, count, nextCursor } = await paginate(PaymentTransaction, {
+    where,
+    include,
     limit,
     cursor,
     order: buildOrder(sort || '-occurred_at'),
+    attributes,
   });
 
   const analyticsPayload = analytics
@@ -556,25 +1028,33 @@ const approveRefund = async ({ id, actorId, decision }) => {
   return request.get({ plain: true });
 };
 
-const listDisputes = async ({ limit, cursor, sort, status, analytics }) => {
+const listDisputes = async ({ limit, cursor, sort, status, analytics, fields, expand }) => {
   const where = {};
   if (status) where.status = status;
 
-  const { rows, count, nextCursor } = await paginate(Dispute, {
-    where,
-    include: [
+  const attributes = sanitizeFields(fields);
+  const include = buildIncludes(
+    [
       { model: User, as: 'claimant', attributes: ['id', 'email'] },
       { model: User, as: 'respondent', attributes: ['id', 'email'] },
     ],
+    expand,
+    {}
+  );
+
+  const { rows, count, nextCursor } = await paginate(Dispute, {
+    where,
+    include,
     limit,
     cursor,
     order: buildOrder(sort),
+    attributes,
   });
 
   let analyticsPayload;
   if (analytics) {
     const statusCounts = await Dispute.count({
-      where: { status: { [Op.not]: null } },
+      where: { ...where, status: { [Op.not]: null } },
       group: ['status'],
     });
     analyticsPayload = {
@@ -612,26 +1092,34 @@ const decideDispute = async (id, { decision, resolution }) => {
   return dispute.get({ plain: true });
 };
 
-const listModerationStrikes = async ({ limit, cursor, sort, user_id, status, analytics }) => {
+const listModerationStrikes = async ({ limit, cursor, sort, user_id, status, analytics, fields, expand }) => {
   const where = {};
   if (user_id) where.user_id = user_id;
   if (status) where.status = status;
 
-  const { rows, count, nextCursor } = await paginate(ModerationStrike, {
-    where,
-    include: [
+  const attributes = sanitizeFields(fields);
+  const include = buildIncludes(
+    [
       { model: User, as: 'user', attributes: ['id', 'email'] },
       { model: User, as: 'issuedBy', attributes: ['id', 'email'] },
     ],
+    expand,
+    {}
+  );
+
+  const { rows, count, nextCursor } = await paginate(ModerationStrike, {
+    where,
+    include,
     limit,
     cursor,
     order: buildOrder(sort),
+    attributes,
   });
 
   const analyticsPayload = analytics
     ? {
         total: count,
-        active: await ModerationStrike.count({ where: { status: 'active' } }),
+        active: await ModerationStrike.count({ where: { ...where, status: 'active' } }),
       }
     : undefined;
 
@@ -673,11 +1161,31 @@ const updateModerationStrike = async (id, payload, actorId) => {
     actor_type: 'user',
     entity_type: 'moderation_strike',
     entity_id: strike.id,
-    action: 'strike.update',
+    action: 'moderation_strike.update',
     metadata: payload,
   });
 
   return strike.get({ plain: true });
+};
+
+const deleteModerationStrike = async (id, actorId) => {
+  const strike = await ModerationStrike.findByPk(id);
+  if (!strike) {
+    throw new ApiError(404, 'Moderation strike not found', 'STRIKE_NOT_FOUND');
+  }
+
+  await strike.destroy();
+
+  await AuditLog.create({
+    actor_id: actorId,
+    actor_type: 'user',
+    entity_type: 'moderation_strike',
+    entity_id: id,
+    action: 'moderation_strike.delete',
+    metadata: { status: 'deleted' },
+  });
+
+  return { success: true };
 };
 
 const getSettings = async () => {
@@ -713,7 +1221,7 @@ const updateSettings = async (payload, actorId) => {
   return settings.get({ plain: true });
 };
 
-const listAuditLogs = async ({ limit, cursor, actor, entity, from, to, analytics }) => {
+const listAuditLogs = async ({ limit, cursor, actor, entity, from, to, analytics, fields, expand }) => {
   const where = {};
   if (actor) where.actor_id = actor;
   if (entity) {
@@ -722,12 +1230,20 @@ const listAuditLogs = async ({ limit, cursor, actor, entity, from, to, analytics
   }
   Object.assign(where, applyDateFilter({}, from, to, 'created_at'));
 
+  const attributes = sanitizeFields(fields);
+  const include = buildIncludes(
+    [{ model: User, as: 'actor', attributes: ['id', 'email'] }],
+    expand,
+    {}
+  );
+
   const { rows, count, nextCursor } = await paginate(AuditLog, {
     where,
-    include: [{ model: User, as: 'actor', attributes: ['id', 'email'] }],
+    include,
     limit,
     cursor,
     order: [['created_at', 'DESC']],
+    attributes,
   });
 
   return {
@@ -860,16 +1376,25 @@ const restore = async ({ entity_type, id }) => {
 module.exports = {
   overview,
   listUsers,
+  createUser,
   updateUser,
+  getUser,
+  deleteUser,
   impersonateUser,
   listOrganizations,
+  createOrganization,
   updateOrganization,
+  getOrganization,
+  deleteOrganization,
   listReports,
   actOnReport,
   getMarketplaceConfig,
   updateMarketplaceConfig,
   listJobs,
+  createJob,
   updateJob,
+  getJob,
+  deleteJob,
   listLedger,
   approvePayout,
   approveRefund,
@@ -878,6 +1403,7 @@ module.exports = {
   listModerationStrikes,
   createModerationStrike,
   updateModerationStrike,
+  deleteModerationStrike,
   getSettings,
   updateSettings,
   listAuditLogs,

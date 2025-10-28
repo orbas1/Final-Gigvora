@@ -43,6 +43,7 @@ module.exports = (sequelize) => {
       this.hasMany(models.Post, { foreignKey: 'user_id', as: 'posts' });
       this.hasMany(models.Notification, { foreignKey: 'user_id', as: 'notifications' });
       this.hasOne(models.UserSetting, { foreignKey: 'user_id', as: 'settings' });
+      this.belongsTo(models.Organization, { foreignKey: 'org_id', as: 'organization' });
     }
 
     async validatePassword(password) {
