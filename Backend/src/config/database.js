@@ -1,5 +1,8 @@
 require('dotenv').config({ path: process.env.DOTENV_CONFIG_PATH || '.env' });
 
+const fs = require('fs');
+const path = require('path');
+
 const common = {
   define: {
     underscored: true,
@@ -12,6 +15,30 @@ const int = (value, fallback) => {
   if (value === undefined || value === null || value === '') return fallback;
   const parsed = Number(value);
   return Number.isNaN(parsed) ? fallback : parsed;
+};
+
+const ensureSqliteStorage = (connection) => {
+  if (connection.dialect !== 'sqlite') {
+    return connection;
+  }
+
+  const storagePath = connection.storage;
+  if (!storagePath || storagePath === ':memory:') {
+    return connection;
+  }
+
+  const resolved = path.resolve(storagePath);
+  const directory = path.dirname(resolved);
+
+  try {
+    fs.mkdirSync(directory, { recursive: true });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn(`Failed to ensure SQLite storage directory "${directory}":`, error);
+  }
+
+  connection.storage = resolved;
+  return connection;
 };
 
 const buildConnection = (prefix, defaults) => {
@@ -37,6 +64,7 @@ const buildConnection = (prefix, defaults) => {
     delete connection.host;
     delete connection.port;
     delete connection.pool;
+    return ensureSqliteStorage(connection);
   }
 
   return connection;

@@ -3,6 +3,8 @@
 const { Model, DataTypes } = require('sequelize');
 const { jsonColumn, enumColumn } = require('./helpers/columnTypes');
 
+const VISIBILITY_OPTIONS = ['public', 'connections', 'private'];
+
 module.exports = (sequelize) => {
   class Post extends Model {
     static associate(models) {
@@ -15,9 +17,6 @@ module.exports = (sequelize) => {
     }
   }
 
-  const dialect = sequelize.getDialect();
-  const jsonType = dialect === 'postgres' ? DataTypes.JSONB : DataTypes.JSON;
-
   Post.init(
     {
       id: {
@@ -29,11 +28,11 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      content: DataTypes.TEXT,
-      attachments: jsonColumn(sequelize, DataTypes, { allowNull: true }),
-      share_ref: jsonColumn(sequelize, DataTypes, { allowNull: true }),
-      visibility: enumColumn(sequelize, DataTypes, ['public', 'connections', 'private'], {
       org_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      group_id: {
         type: DataTypes.UUID,
         allowNull: true,
       },
@@ -41,51 +40,46 @@ module.exports = (sequelize) => {
         type: DataTypes.TEXT,
         allowNull: false,
       },
-      attachments: {
-        type: jsonType,
+      attachments: jsonColumn(sequelize, DataTypes, {
         allowNull: true,
-      },
-      share_ref: {
-        type: jsonType,
+        defaultValue: [],
+      }),
+      share_ref: jsonColumn(sequelize, DataTypes, {
         allowNull: true,
-      },
-      visibility: {
-        type: DataTypes.ENUM('public', 'connections', 'private'),
+        defaultValue: null,
+      }),
+      visibility: enumColumn(sequelize, DataTypes, VISIBILITY_OPTIONS, {
+        allowNull: false,
         defaultValue: 'public',
       }),
-      analytics_snapshot: jsonColumn(sequelize, DataTypes, { allowNull: true }),
-      group_id: {
-        type: DataTypes.UUID,
+      analytics_snapshot: jsonColumn(sequelize, DataTypes, {
         allowNull: true,
-      },
-      analytics_snapshot: {
-        type: jsonType,
-        allowNull: true,
-      },
+        defaultValue: {},
+      }),
       comment_count: {
         type: DataTypes.INTEGER,
-        defaultValue: 0,
         allowNull: false,
+        defaultValue: 0,
       },
       reaction_count: {
         type: DataTypes.INTEGER,
-        defaultValue: 0,
         allowNull: false,
+        defaultValue: 0,
       },
       share_count: {
         type: DataTypes.INTEGER,
-        defaultValue: 0,
         allowNull: false,
+        defaultValue: 0,
       },
       view_count: {
         type: DataTypes.INTEGER,
-        defaultValue: 0,
         allowNull: false,
+        defaultValue: 0,
       },
       unique_view_count: {
         type: DataTypes.INTEGER,
-        defaultValue: 0,
         allowNull: false,
+        defaultValue: 0,
       },
       last_activity_at: {
         type: DataTypes.DATE,
