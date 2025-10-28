@@ -51,6 +51,7 @@ export function PopoverMenu({ trigger, items, align = 'end', width = 240 }) {
         >
           {item.icon ? <span className="popover-menu__icon">{item.icon}</span> : null}
           <span className="popover-menu__label">{item.label}</span>
+          {item.badge ? <span className="popover-menu__badge">{item.badge}</span> : null}
         </button>
       ))}
     </div>

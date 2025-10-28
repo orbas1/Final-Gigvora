@@ -659,7 +659,7 @@ function QuickCreateForm({ type, onSuccess, onClose }) {
   )
 }
 
-function ProfileCard({ profile, loading }) {
+function ProfileCard({ profile, loading, onNavigate }) {
   if (loading) {
     return (
       <Surface>
@@ -703,9 +703,18 @@ function ProfileCard({ profile, loading }) {
           </div>
         </div>
         <div className="profile-card__links">
-          <span>Projects {profile.projects}</span>
-          <span>Gigs {profile.gigs}</span>
-          <span>Jobs {profile.jobs}</span>
+          <button type="button" onClick={() => onNavigate?.('projects')}>
+            <span>My Projects</span>
+            <strong>{Number(profile.projects || 0).toLocaleString()}</strong>
+          </button>
+          <button type="button" onClick={() => onNavigate?.('my-gigs')}>
+            <span>My Gigs</span>
+            <strong>{Number(profile.gigs || 0).toLocaleString()}</strong>
+          </button>
+          <button type="button" onClick={() => onNavigate?.('jobs')}>
+            <span>My Jobs</span>
+            <strong>{Number(profile.jobs || 0).toLocaleString()}</strong>
+          </button>
         </div>
       </div>
     </Surface>
@@ -1444,14 +1453,29 @@ export function AppShell() {
     [push]
   )
 
+  const handleQuickNavigate = useCallback(
+    (key) => {
+      if (!key) return
+      setActive(key)
+      const quickLabels = {
+        projects: 'My Projects',
+        'my-gigs': 'My Gigs',
+        jobs: 'My Jobs',
+      }
+      const label = quickLabels[key] || PRIMARY_NAV_ITEMS.find((item) => item.key === key)?.label || key
+      push({ title: 'Navigated', description: `Opening ${label}.` })
+    },
+    [setActive, push]
+  )
+
   const leftColumn = useMemo(
     () => (
       <>
-        <ProfileCard profile={data?.profile} loading={loading} />
+        <ProfileCard profile={data?.profile} loading={loading} onNavigate={handleQuickNavigate} />
         <MetricStack metrics={data?.metrics || []} loading={loading} />
       </>
     ),
-    [data?.profile, data?.metrics, loading]
+    [data?.profile, data?.metrics, loading, handleQuickNavigate]
   )
 
   const rightColumn = useMemo(
