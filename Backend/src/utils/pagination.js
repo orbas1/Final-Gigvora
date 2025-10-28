@@ -47,7 +47,10 @@ const parseSort = (sort = 'created_at:desc') => {
   return { field, direction: normalizedDirection };
 };
 
-const buildPagination = ({ limit = 20, cursor, sort = 'created_at:desc' }, allowedSortFields = ['created_at']) => {
+const buildPagination = (
+  { limit = 20, cursor, sort = 'created_at:desc' },
+  allowedSortFields = ['created_at']
+) => {
   const safeFields = Array.isArray(allowedSortFields) && allowedSortFields.length ? allowedSortFields : ['created_at'];
   const { field, direction } = parseSort(sort);
   const sortField = safeFields.includes(field) ? field : safeFields[0];
