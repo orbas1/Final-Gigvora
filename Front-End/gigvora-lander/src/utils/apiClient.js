@@ -1,16 +1,19 @@
-const defaultHeaders = {
-  'Content-Type': 'application/json',
-}
-
 export async function apiRequest(path, options = {}) {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1'
+  const isFormData = options.body instanceof FormData
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  }
+
+  if (isFormData) {
+    delete headers['Content-Type']
+  }
+
   try {
     const response = await fetch(`${baseUrl}${path}`, {
       ...options,
-      headers: {
-        ...defaultHeaders,
-        ...(options.headers || {}),
-      },
+      headers,
       credentials: 'include',
     })
 
@@ -25,6 +28,9 @@ export async function apiRequest(path, options = {}) {
     if (response.status === 204) return null
     return response.json()
   } catch (error) {
+    if (error.name === 'AbortError') {
+      throw error
+    }
     const { getMockApiResponse } = await import('./mockApiData')
     const shouldMock = import.meta.env.DEV || import.meta.env.VITE_USE_MOCKS === 'true'
     if (shouldMock) {

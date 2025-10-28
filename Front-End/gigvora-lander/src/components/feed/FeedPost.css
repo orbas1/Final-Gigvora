@@ -1,0 +1,212 @@
+.feed-post {
+  display: grid;
+  gap: clamp(var(--space-md), 2vw, var(--space-xl));
+}
+
+.feed-post__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.feed-post__author {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.feed-post__author strong {
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+}
+
+.feed-post__author span {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.feed-post__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.feed-post__visibility {
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: rgba(42, 115, 255, 0.12);
+  color: var(--color-brand-700);
+}
+
+.feed-post__headline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  letter-spacing: -0.01em;
+}
+
+.feed-post__content {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: 1.65;
+  color: var(--color-text-primary);
+}
+
+.feed-post__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-brand-700);
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.feed-post__media {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.feed-post__media img,
+.feed-post__media video {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  background: rgba(16, 63, 166, 0.1);
+}
+
+.feed-post__entity {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-lg);
+  background: rgba(42, 115, 255, 0.08);
+}
+
+.feed-post__entity span {
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  color: var(--color-brand-700);
+}
+
+.feed-post__entity strong {
+  display: block;
+  font-size: var(--text-lg);
+}
+
+.feed-post__entity em {
+  font-style: normal;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.feed-post__entity p {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.feed-post__entity-link {
+  align-self: flex-start;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(42, 115, 255, 0.24);
+  font-weight: 600;
+  color: var(--color-brand-700);
+}
+
+.feed-post__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.feed-post__tags span {
+  padding: var(--space-2xs) var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: rgba(42, 115, 255, 0.12);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.feed-post__footer {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.feed-post__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.feed-post__stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.feed-post__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.feed-post__reactions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-sm);
+}
+
+.feed-post__reactions button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(42, 115, 255, 0.16);
+  background: rgba(42, 115, 255, 0.06);
+  padding: var(--space-xs) var(--space-sm);
+  font-weight: 600;
+  color: var(--color-brand-700);
+  transition: border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.feed-post__reactions button.active {
+  border-color: rgba(42, 115, 255, 0.32);
+  background: rgba(42, 115, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.feed-post__reactions button:hover,
+.feed-post__reactions button:focus-visible {
+  border-color: rgba(42, 115, 255, 0.28);
+}
+
+.feed-post__shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+@media (max-width: 768px) {
+  .feed-post__header {
+    align-items: flex-start;
+  }
+
+  .feed-post__stats {
+    gap: var(--space-sm);
+  }
+
+  .feed-post__reactions {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}

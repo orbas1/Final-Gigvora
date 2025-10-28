@@ -12,6 +12,7 @@ import { apiRequest } from '../../utils/apiClient'
 import { useDashboardResources } from '../../hooks/useDashboardResources'
 import { useResource } from '../../hooks/useResource'
 import { cx } from '../../utils/cx'
+import FeedView from '../feed/FeedView'
 import './AppShell.css'
 
 const quickCreateConfig = {
@@ -806,191 +807,6 @@ function RightRail({ whoToFollow, collections, loading, onConnect, onSaveOpportu
   )
 }
 
-function FeedView({ feed, loading, error, onRefresh, activeFilter, onFilterChange, profile }) {
-  const { push } = useToasts()
-  const [content, setContent] = useState('')
-  const [link, setLink] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  const handleFilterClick = (key) => {
-    if (key === activeFilter) return
-    onFilterChange(key)
-  }
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    const trimmed = content.trim()
-    if (!trimmed) {
-      push({ title: 'Add a message', description: 'Write a quick update before sharing.' })
-      return
-    }
-    setSubmitting(true)
-    try {
-      const payload = { content: trimmed }
-      if (link.trim()) {
-        payload.link = link.trim()
-      }
-      await apiRequest('/posts', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
-      push({ title: 'Post published', description: 'Your update is live for your network.' })
-      setContent('')
-      setLink('')
-      onRefresh()
-    } catch (postError) {
-      push({ title: 'Unable to publish', description: postError.body?.message || postError.message, intent: 'danger' })
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const characterHint = content.trim().length
-    ? `${content.trim().length} characters`
-    : 'Plain text update'
-
-  return (
-    <Surface className="feed-view" elevation="md">
-      <header>
-        <div>
-          <h2>Community feed</h2>
-          <p>Live intelligence from across your network.</p>
-        </div>
-        <div className="feed-view__toolbar">
-          <div className="feed-filters" role="tablist" aria-label="Feed filters">
-            {FEED_FILTERS.map((filter) => (
-              <button
-                key={filter.key}
-                type="button"
-                className={filter.key === activeFilter ? 'active' : undefined}
-                aria-pressed={filter.key === activeFilter}
-                onClick={() => handleFilterClick(filter.key)}
-                disabled={loading && filter.key !== activeFilter}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onRefresh}
-            icon={<Icon name="refresh" size={16} />}
-            disabled={loading}
-          >
-            Refresh
-          </Button>
-        </div>
-      </header>
-      <section className="composer" aria-label="Share an update">
-        <div className="composer__author">
-          <Avatar
-            src={profile?.avatarUrl}
-            initials={profile?.initials}
-            alt={`${profile?.name || 'Account'} avatar`}
-            size={56}
-          />
-          <div>
-            <strong>{profile?.name || 'Share an update'}</strong>
-            <span>{profile?.headline || 'Tell your network what you are working on.'}</span>
-          </div>
-        </div>
-        <form className="composer__form" onSubmit={handleSubmit}>
-          <label className="visually-hidden" htmlFor="composer-content">
-            Post content
-          </label>
-          <textarea
-            id="composer-content"
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            placeholder="Share progress, wins, or opportunities"
-            required
-            rows={4}
-            maxLength={2800}
-          />
-          <label className="composer__field" htmlFor="composer-link">
-            <span>Link (optional)</span>
-            <input
-              id="composer-link"
-              type="url"
-              inputMode="url"
-              placeholder="https://"
-              value={link}
-              onChange={(event) => setLink(event.target.value)}
-            />
-          </label>
-          <div className="composer__actions">
-            <span className="composer__hint">{characterHint}</span>
-            <Button
-              type="submit"
-              icon={<Icon name="feed" size={16} />}
-              disabled={submitting || !content.trim()}
-            >
-              {submitting ? 'Posting…' : 'Share update'}
-            </Button>
-          </div>
-        </form>
-      </section>
-      {error ? (
-        <div className="feed-view__status feed-view__status--error" role="alert">
-          <p>{error.body?.message || error.message}</p>
-          <Button variant="outline" size="sm" onClick={onRefresh}>
-            Try again
-          </Button>
-        </div>
-      ) : null}
-      <ul className="feed-view__list">
-        {loading
-          ? Array.from({ length: 3 }).map((_, index) => (
-              <li key={index} className="feed-view__item feed-view__item--loading">
-                <span className="skeleton skeleton--avatar" />
-                <div className="feed-view__loading-lines">
-                  <span className="skeleton skeleton--text" />
-                  <span className="skeleton skeleton--text" />
-                </div>
-              </li>
-            ))
-          : feed.map((item) => (
-              <li key={item.id} className="feed-view__item">
-                <article className="feed-card">
-                  <header>
-                    <Avatar src={item.avatarUrl} initials={item.avatar} alt={`${item.author} avatar`} size={48} />
-                    <div>
-                      <strong>{item.author}</strong>
-                      <span>{item.timestamp || 'Just now'}</span>
-                    </div>
-                  </header>
-                  <p>{item.headline}</p>
-                  {item.media ? <img src={item.media} alt="Post attachment" loading="lazy" /> : null}
-                  {item.tags?.length ? (
-                    <div className="feed-card__tags" aria-label="Post tags">
-                      {item.tags.map((tag) => (
-                        <span key={tag}>#{tag}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <footer>
-                    <span aria-label="Reactions">
-                      <Icon name="like" size={16} /> {item.reactions}
-                    </span>
-                    <span aria-label="Comments">
-                      <Icon name="messages" size={16} /> {item.comments}
-                    </span>
-                    <span aria-label="Shares">
-                      <Icon name="share" size={16} /> {item.shares}
-                    </span>
-                  </footer>
-                </article>
-              </li>
-            ))}
-      </ul>
-      {!loading && !feed.length ? (
-        <div className="feed-view__empty">No updates yet. Share something to spark the conversation.</div>
-      ) : null}
-    </Surface>
-  )
-}
-
 function SearchView({ results, searching, lastQuery }) {
   return (
     <Surface className="search-view" elevation="md">
@@ -1654,13 +1470,23 @@ export function AppShell() {
   const detailContext = useMemo(() => ({ profile: data?.profile }), [data?.profile])
 
   const feedProps = {
-    feed: data?.feed || [],
-    loading,
-    error,
-    onRefresh: refresh,
-    activeFilter: feedFilter,
-    onFilterChange: handleFeedFilterChange,
     profile: data?.profile,
+    filter: feedFilter,
+    onFilterChange: handleFeedFilterChange,
+    role,
+    initialItems: data?.feed || [],
+    initialCursor: data?.feedCursor,
+    suggestions: {
+      people: data?.whoToFollow || [],
+      groups: data?.collections?.groups || [],
+      companies: data?.collections?.companies || [],
+      opportunities: data?.collections?.opportunities || [],
+    },
+    isGlobalLoading: loading,
+    globalError: error,
+    onRefreshAll: refresh,
+    onConnectSuggestion: handleConnect,
+    onSaveOpportunity: handleSaveOpportunity,
   }
 
   const mainContent = useMemo(() => {
