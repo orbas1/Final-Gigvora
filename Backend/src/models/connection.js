@@ -36,6 +36,25 @@ module.exports = (sequelize) => {
       sequelize,
       modelName: 'Connection',
       tableName: 'connections',
+      indexes: [
+        {
+          name: 'connections_unique_pair',
+          unique: true,
+          fields: ['requester_id', 'addressee_id', 'deleted_at'],
+        },
+        {
+          name: 'connections_requester_status_idx',
+          fields: ['requester_id', 'status'],
+        },
+        {
+          name: 'connections_addressee_status_idx',
+          fields: ['addressee_id', 'status'],
+        },
+        {
+          name: 'connections_created_at_idx',
+          fields: ['created_at'],
+        },
+      ],
     }
   );
 

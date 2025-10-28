@@ -17,6 +17,9 @@ const applicationRoutes = require('./applicationRoutes');
 const interviewRoutes = require('./interviewRoutes');
 const analyticsRoutes = require('./analyticsRoutes');
 const scorecardRoutes = require('./scorecardRoutes');
+const conversationRoutes = require('./conversationRoutes');
+const networkingRoutes = require('./networkingRoutes');
+const liveRoutes = require('./liveRoutes');
 const { idempotencyMiddleware } = require('../middleware/idempotency');
 
 const router = express.Router();
@@ -40,5 +43,8 @@ router.use('/applications', applicationRoutes);
 router.use('/interviews', interviewRoutes);
 router.use('/scorecards', scorecardRoutes);
 router.use('/', analyticsRoutes);
+router.use('/', conversationRoutes);
+router.use('/networking', networkingRoutes);
+router.use('/live', liveRoutes);
 
 module.exports = router;
