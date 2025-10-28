@@ -34,6 +34,7 @@ module.exports = (sequelize) => {
       sequelize,
       modelName: 'Reaction',
       tableName: 'reactions',
+      paranoid: true,
     }
   );
 

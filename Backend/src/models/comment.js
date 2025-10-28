@@ -7,6 +7,8 @@ module.exports = (sequelize) => {
     static associate(models) {
       this.belongsTo(models.Post, { foreignKey: 'post_id', as: 'post' });
       this.belongsTo(models.User, { foreignKey: 'user_id', as: 'author' });
+      this.hasMany(models.Comment, { foreignKey: 'parent_id', as: 'replies' });
+      this.belongsTo(models.Comment, { foreignKey: 'parent_id', as: 'parent' });
     }
   }
 
@@ -25,7 +27,10 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      content: DataTypes.TEXT,
+      content: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+      },
       parent_id: {
         type: DataTypes.UUID,
         allowNull: true,
@@ -35,6 +40,7 @@ module.exports = (sequelize) => {
       sequelize,
       modelName: 'Comment',
       tableName: 'comments',
+      paranoid: true,
     }
   );
 

@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn, enumColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class FileAsset extends Model {
@@ -24,12 +25,11 @@ module.exports = (sequelize) => {
       storage_key: DataTypes.STRING,
       mime_type: DataTypes.STRING,
       size_bytes: DataTypes.INTEGER,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
+      metadata: jsonColumn(sequelize, DataTypes),
       scanned_at: DataTypes.DATE,
-      status: {
-        type: DataTypes.ENUM('pending', 'ready', 'blocked'),
+      status: enumColumn(sequelize, DataTypes, ['pending', 'ready', 'blocked'], {
         defaultValue: 'pending',
-      },
+      }),
     },
     {
       sequelize,

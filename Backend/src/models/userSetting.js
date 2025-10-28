@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class UserSetting extends Model {
@@ -21,10 +22,10 @@ module.exports = (sequelize) => {
         allowNull: false,
         unique: true,
       },
-      preferences: DataTypes.JSONB || DataTypes.JSON,
-      security: DataTypes.JSONB || DataTypes.JSON,
-      privacy: DataTypes.JSONB || DataTypes.JSON,
-      theme: DataTypes.JSONB || DataTypes.JSON,
+      preferences: jsonColumn(sequelize, DataTypes),
+      security: jsonColumn(sequelize, DataTypes),
+      privacy: jsonColumn(sequelize, DataTypes),
+      theme: jsonColumn(sequelize, DataTypes),
     },
     {
       sequelize,

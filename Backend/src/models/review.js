@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class Review extends Model {
@@ -30,12 +31,18 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       comment: DataTypes.TEXT,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
+      metadata: jsonColumn(sequelize, DataTypes),
     },
     {
       sequelize,
       modelName: 'Review',
       tableName: 'reviews',
+      underscored: true,
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      paranoid: true,
+      deletedAt: 'deleted_at',
     }
   );
 

@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn, enumColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class Profile extends Model {
@@ -22,6 +23,8 @@ module.exports = (sequelize) => {
       });
       this.hasMany(models.PortfolioItem, { foreignKey: 'profile_id', as: 'portfolio' });
       this.hasMany(models.Review, { foreignKey: 'profile_id', as: 'reviews' });
+      this.hasOne(models.FreelancerProfile, { foreignKey: 'profile_id', as: 'freelancer_overlay' });
+      this.hasMany(models.ProfileView, { foreignKey: 'profile_id', as: 'views' });
     }
   }
 
@@ -42,19 +45,24 @@ module.exports = (sequelize) => {
       location: DataTypes.STRING,
       avatar_url: DataTypes.STRING,
       banner_url: DataTypes.STRING,
-      socials: DataTypes.JSONB || DataTypes.JSON,
+      socials: jsonColumn(sequelize, DataTypes),
       hourly_rate: DataTypes.DECIMAL,
       currency: DataTypes.STRING,
-      visibility: {
-        type: DataTypes.ENUM('public', 'private', 'connections'),
+      visibility: enumColumn(sequelize, DataTypes, ['public', 'private', 'connections'], {
         defaultValue: 'public',
-      },
-      analytics_snapshot: DataTypes.JSONB || DataTypes.JSON,
+      }),
+      analytics_snapshot: jsonColumn(sequelize, DataTypes),
     },
     {
       sequelize,
       modelName: 'Profile',
       tableName: 'profiles',
+      underscored: true,
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      paranoid: true,
+      deletedAt: 'deleted_at',
     }
   );
 
