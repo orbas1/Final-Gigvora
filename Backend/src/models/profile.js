@@ -22,7 +22,12 @@ module.exports = (sequelize) => {
         as: 'tags',
       });
       this.hasMany(models.PortfolioItem, { foreignKey: 'profile_id', as: 'portfolio' });
-      this.hasMany(models.Review, { foreignKey: 'profile_id', as: 'reviews' });
+      this.hasMany(models.Review, {
+        foreignKey: 'subject_id',
+        as: 'reviews',
+        scope: { subject_type: 'profile' },
+        constraints: false,
+      });
       this.hasOne(models.FreelancerProfile, { foreignKey: 'profile_id', as: 'freelancer_overlay' });
       this.hasMany(models.ProfileView, { foreignKey: 'profile_id', as: 'views' });
     }

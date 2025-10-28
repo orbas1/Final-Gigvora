@@ -103,6 +103,15 @@ module.exports = (sequelize) => {
         type: DataTypes.JSONB || DataTypes.JSON,
         allowNull: true,
       },
+      is_sponsored: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      hidden_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       sequelize,

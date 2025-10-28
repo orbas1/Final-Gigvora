@@ -126,6 +126,18 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING,
         defaultValue: 'active',
       },
+      banned_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      ban_expires_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      banned_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       two_factor_secret: {
         type: DataTypes.STRING,
         allowNull: true,

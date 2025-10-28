@@ -217,7 +217,7 @@ const generatePeopleCandidates = async ({ userId, limit, q }) => {
     `(SELECT COUNT(*) FROM ${userFollowTable} AS uf WHERE uf.${quoteIdentifier('followee_id')} = ${profileTable}.${quoteIdentifier('user_id')})`
   );
   const reviewCountLiteral = literal(
-    `(SELECT COUNT(*) FROM ${reviewTable} AS reviews WHERE reviews.${quoteIdentifier('profile_id')} = ${profileTable}.${quoteIdentifier('id')})`
+    `(SELECT COUNT(*) FROM ${reviewTable} AS reviews WHERE reviews.${quoteIdentifier('subject_type')} = 'profile' AND reviews.${quoteIdentifier('subject_id')} = ${profileTable}.${quoteIdentifier('id')})`
   );
 
   const where = {

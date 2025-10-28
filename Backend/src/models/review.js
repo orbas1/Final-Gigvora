@@ -3,11 +3,27 @@
 const { Model, DataTypes } = require('sequelize');
 const { jsonColumn } = require('./helpers/columnTypes');
 
+const SUBJECT_TYPES = ['profile', 'project', 'order'];
+
 module.exports = (sequelize) => {
   class Review extends Model {
     static associate(models) {
-      this.belongsTo(models.Profile, { foreignKey: 'profile_id', as: 'profile' });
       this.belongsTo(models.User, { foreignKey: 'reviewer_id', as: 'reviewer' });
+      this.belongsTo(models.Profile, {
+        foreignKey: 'subject_id',
+        as: 'profileSubject',
+        constraints: false,
+      });
+      this.belongsTo(models.Job, {
+        foreignKey: 'subject_id',
+        as: 'projectSubject',
+        constraints: false,
+      });
+      this.belongsTo(models.EscrowIntent, {
+        foreignKey: 'subject_id',
+        as: 'orderSubject',
+        constraints: false,
+      });
     }
   }
 
@@ -18,7 +34,21 @@ module.exports = (sequelize) => {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
-      profile_id: {
+      subject_type: {
+        type: DataTypes.ENUM(...SUBJECT_TYPES),
+        allowNull: false,
+        set(value) {
+          if (typeof value === 'string') {
+            this.setDataValue('subject_type', value.toLowerCase());
+          } else {
+            this.setDataValue('subject_type', value);
+          }
+        },
+        validate: {
+          isIn: [SUBJECT_TYPES],
+        },
+      },
+      subject_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
@@ -29,6 +59,10 @@ module.exports = (sequelize) => {
       rating: {
         type: DataTypes.INTEGER,
         allowNull: false,
+        validate: {
+          min: 1,
+          max: 5,
+        },
       },
       comment: DataTypes.TEXT,
       metadata: jsonColumn(sequelize, DataTypes),
@@ -43,8 +77,16 @@ module.exports = (sequelize) => {
       updatedAt: 'updated_at',
       paranoid: true,
       deletedAt: 'deleted_at',
+      indexes: [
+        { fields: ['subject_type', 'subject_id'] },
+        { fields: ['reviewer_id'] },
+      ],
     }
   );
+
+  Review.addScope('forProfile', {
+    where: { subject_type: 'profile' },
+  });
 
   return Review;
 };
