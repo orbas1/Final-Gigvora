@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class Notification extends Model {
@@ -21,7 +22,7 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       type: DataTypes.STRING,
-      data: DataTypes.JSONB || DataTypes.JSON,
+      data: jsonColumn(sequelize, DataTypes),
       read_at: DataTypes.DATE,
       channel: DataTypes.STRING,
     },

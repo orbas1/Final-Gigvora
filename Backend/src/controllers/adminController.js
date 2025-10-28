@@ -26,7 +26,7 @@ const users = async (req, res, next) => {
 const restore = async (req, res, next) => {
   try {
     const payload = await restoreSchema.validateAsync(req.body);
-    const result = await service.restore(payload);
+    const result = await service.restore(payload, req.user);
     res.json(result);
   } catch (error) {
     next(error);
