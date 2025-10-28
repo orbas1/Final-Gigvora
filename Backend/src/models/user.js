@@ -43,6 +43,10 @@ module.exports = (sequelize) => {
       this.hasMany(models.Post, { foreignKey: 'user_id', as: 'posts' });
       this.hasMany(models.Notification, { foreignKey: 'user_id', as: 'notifications' });
       this.hasOne(models.UserSetting, { foreignKey: 'user_id', as: 'settings' });
+      this.hasMany(models.CalendarEvent, { foreignKey: 'owner_id', as: 'calendarEvents' });
+      this.hasMany(models.CalendarEventParticipant, { foreignKey: 'user_id', as: 'calendarParticipations' });
+      this.hasMany(models.CalendarIntegration, { foreignKey: 'user_id', as: 'calendarIntegrations' });
+      this.hasMany(models.CalendarIcsToken, { foreignKey: 'user_id', as: 'calendarIcsTokens' });
     }
 
     async validatePassword(password) {
