@@ -1,3 +1,4 @@
+const { User, Profile, Connection, sequelize } = require('../models');
 const {
   User,
   Profile,
@@ -68,6 +69,9 @@ const restore = async ({ entity_type, id }) => {
 
   if (!restoredCount) {
     throw new ApiError(404, 'Entity not found or not deleted', 'RESTORE_NOT_FOUND');
+  }
+  if (entity_type === 'connection') {
+    await Connection.restore({ where: { id } });
   }
 
   return { success: true };
