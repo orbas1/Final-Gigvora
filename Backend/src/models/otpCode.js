@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { enumColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class OtpCode extends Model {
@@ -20,10 +21,7 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      channel: {
-        type: DataTypes.ENUM('email', 'sms'),
-        defaultValue: 'email',
-      },
+      channel: enumColumn(sequelize, DataTypes, ['email', 'sms'], { defaultValue: 'email' }),
       code: {
         type: DataTypes.STRING,
         allowNull: false,
