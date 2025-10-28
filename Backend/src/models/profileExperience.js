@@ -31,6 +31,12 @@ module.exports = (sequelize) => {
       sequelize,
       modelName: 'ProfileExperience',
       tableName: 'profile_experiences',
+      underscored: true,
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      paranoid: true,
+      deletedAt: 'deleted_at',
     }
   );
 

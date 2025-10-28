@@ -3,14 +3,14 @@
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-  class Review extends Model {
+  class ProfileView extends Model {
     static associate(models) {
       this.belongsTo(models.Profile, { foreignKey: 'profile_id', as: 'profile' });
-      this.belongsTo(models.User, { foreignKey: 'reviewer_id', as: 'reviewer' });
+      this.belongsTo(models.User, { foreignKey: 'viewer_id', as: 'viewer' });
     }
   }
 
-  Review.init(
+  ProfileView.init(
     {
       id: {
         type: DataTypes.UUID,
@@ -21,29 +21,26 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      reviewer_id: {
+      viewer_id: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
       },
-      rating: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
+      source: DataTypes.STRING,
+      viewed_at: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
       },
-      comment: DataTypes.TEXT,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
     },
     {
       sequelize,
-      modelName: 'Review',
-      tableName: 'reviews',
+      modelName: 'ProfileView',
+      tableName: 'profile_views',
       underscored: true,
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
-      paranoid: true,
-      deletedAt: 'deleted_at',
     }
   );
 
-  return Review;
+  return ProfileView;
 };
