@@ -1,3 +1,4 @@
+const { User, Profile, Suggestion, DiscoverEntity, sequelize } = require('../models');
 const {
   User,
   Profile,
@@ -157,6 +158,12 @@ const restore = async ({ entity_type, id }, currentUser) => {
   }
   if (entity_type === 'dispute_message') {
     await DisputeMessage.restore({ where: { id } });
+  }
+  if (entity_type === 'suggestion') {
+    await Suggestion.restore({ where: { id } });
+  }
+  if (entity_type === 'discover_entity') {
+    await DiscoverEntity.restore({ where: { id } });
   }
   if (entity_type === 'dispute_evidence') {
     await DisputeEvidence.restore({ where: { id } });
