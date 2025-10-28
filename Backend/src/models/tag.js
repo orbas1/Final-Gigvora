@@ -11,6 +11,18 @@ module.exports = (sequelize) => {
         otherKey: 'profile_id',
         as: 'profiles',
       });
+      this.belongsToMany(models.Project, {
+        through: models.ProjectTag,
+        foreignKey: 'tag_id',
+        otherKey: 'project_id',
+        as: 'projects',
+      });
+      this.belongsToMany(models.Gig, {
+        through: models.GigTag,
+        foreignKey: 'tag_id',
+        otherKey: 'gig_id',
+        as: 'gigs',
+      });
     }
   }
 

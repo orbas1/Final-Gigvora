@@ -43,6 +43,22 @@ module.exports = (sequelize) => {
       this.hasMany(models.Post, { foreignKey: 'user_id', as: 'posts' });
       this.hasMany(models.Notification, { foreignKey: 'user_id', as: 'notifications' });
       this.hasOne(models.UserSetting, { foreignKey: 'user_id', as: 'settings' });
+      this.hasMany(models.Project, { foreignKey: 'owner_id', as: 'ownedProjects' });
+      this.hasMany(models.ProjectInvite, { foreignKey: 'freelancer_id', as: 'projectInvites' });
+      this.hasMany(models.ProjectInvite, { foreignKey: 'inviter_id', as: 'projectInvitesSent' });
+      this.hasMany(models.ProjectBid, { foreignKey: 'bidder_id', as: 'projectBids' });
+      this.hasMany(models.ProjectDeliverable, { foreignKey: 'submitter_id', as: 'projectDeliverablesSubmitted' });
+      this.hasMany(models.ProjectDeliverable, { foreignKey: 'reviewer_id', as: 'projectDeliverablesReviewed' });
+      this.hasMany(models.ProjectTimeLog, { foreignKey: 'user_id', as: 'projectTimeLogs' });
+      this.hasMany(models.ProjectTimeLog, { foreignKey: 'approved_by', as: 'projectTimeLogApprovals' });
+      this.hasMany(models.ProjectReview, { foreignKey: 'reviewer_id', as: 'projectReviewsAuthored' });
+      this.hasMany(models.ProjectReview, { foreignKey: 'reviewee_id', as: 'projectReviewsReceived' });
+      this.hasMany(models.Gig, { foreignKey: 'seller_id', as: 'gigs' });
+      this.hasMany(models.GigOrder, { foreignKey: 'buyer_id', as: 'orders' });
+      this.hasMany(models.GigOrder, { foreignKey: 'seller_id', as: 'sales' });
+      this.hasMany(models.OrderSubmission, { foreignKey: 'submitter_id', as: 'orderSubmissions' });
+      this.hasMany(models.OrderReview, { foreignKey: 'reviewer_id', as: 'orderReviewsAuthored' });
+      this.hasMany(models.OrderReview, { foreignKey: 'reviewee_id', as: 'orderReviewsReceived' });
     }
 
     async validatePassword(password) {
