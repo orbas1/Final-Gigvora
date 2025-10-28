@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn, enumColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class Post extends Model {
@@ -8,6 +9,7 @@ module.exports = (sequelize) => {
       this.belongsTo(models.User, { foreignKey: 'user_id', as: 'author' });
       this.hasMany(models.Comment, { foreignKey: 'post_id', as: 'comments' });
       this.hasMany(models.Reaction, { foreignKey: 'post_id', as: 'reactions' });
+      this.belongsTo(models.Group, { foreignKey: 'group_id', as: 'group' });
       this.hasMany(models.PostShare, { foreignKey: 'post_id', as: 'shares' });
       this.hasMany(models.PostActivity, { foreignKey: 'post_id', as: 'activities' });
     }
@@ -27,6 +29,10 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
+      content: DataTypes.TEXT,
+      attachments: jsonColumn(sequelize, DataTypes, { allowNull: true }),
+      share_ref: jsonColumn(sequelize, DataTypes, { allowNull: true }),
+      visibility: enumColumn(sequelize, DataTypes, ['public', 'connections', 'private'], {
       org_id: {
         type: DataTypes.UUID,
         allowNull: true,
@@ -46,6 +52,11 @@ module.exports = (sequelize) => {
       visibility: {
         type: DataTypes.ENUM('public', 'connections', 'private'),
         defaultValue: 'public',
+      }),
+      analytics_snapshot: jsonColumn(sequelize, DataTypes, { allowNull: true }),
+      group_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
       },
       analytics_snapshot: {
         type: jsonType,

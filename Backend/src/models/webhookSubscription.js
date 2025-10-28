@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class WebhookSubscription extends Model {
@@ -19,6 +20,9 @@ module.exports = (sequelize) => {
   WebhookSubscription.init(
     {
       id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+      name: DataTypes.STRING,
+      url: DataTypes.STRING,
+      events: jsonColumn(sequelize, DataTypes),
       owner_id: { type: DataTypes.UUID },
       name: { type: DataTypes.STRING, allowNull: false },
       url: { type: DataTypes.STRING, allowNull: false },

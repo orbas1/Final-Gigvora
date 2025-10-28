@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { enumColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class Connection extends Model {
@@ -25,10 +26,9 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      status: {
-        type: DataTypes.ENUM('pending', 'accepted', 'rejected'),
+      status: enumColumn(sequelize, DataTypes, ['pending', 'accepted', 'rejected'], {
         defaultValue: 'pending',
-      },
+      }),
       note: DataTypes.TEXT,
       responded_at: DataTypes.DATE,
     },

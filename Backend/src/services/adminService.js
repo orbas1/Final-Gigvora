@@ -1,3 +1,4 @@
+const { User, Profile, Group } = require('../models');
 const { User, Profile, Post, Comment, sequelize } = require('../models');
 const { User, Profile, LegalDocument, LegalConsent, WebhookSubscription, WebhookDelivery } = require('../models');
 const { User, Profile } = require('../models');
@@ -219,6 +220,9 @@ const restore = async ({ entity_type, id }) => {
   }
   if (entity_type === 'conversation') {
     await Conversation.restore({ where: { id } });
+  }
+  if (entity_type === 'group') {
+    await Group.restore({ where: { id } });
   }
   if (entity_type === 'message') {
     await Message.restore({ where: { id } });

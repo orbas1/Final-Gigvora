@@ -11,6 +11,12 @@ module.exports = (sequelize) => {
         otherKey: 'profile_id',
         as: 'profiles',
       });
+      this.belongsToMany(models.Group, {
+        through: models.GroupTag,
+        foreignKey: 'tag_id',
+        otherKey: 'group_id',
+        as: 'groups',
+      });
     }
   }
 

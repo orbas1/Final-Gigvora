@@ -4,37 +4,45 @@ const { Model, DataTypes } = require('sequelize');
 const { enumColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
-  class OtpCode extends Model {
+  class GroupMember extends Model {
     static associate(models) {
+      this.belongsTo(models.Group, { foreignKey: 'group_id', as: 'group' });
       this.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
     }
   }
 
-  OtpCode.init(
+  GroupMember.init(
     {
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
+      group_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
       user_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      channel: enumColumn(sequelize, DataTypes, ['email', 'sms'], { defaultValue: 'email' }),
-      code: {
-        type: DataTypes.STRING,
+      role: enumColumn(sequelize, DataTypes, ['member', 'mod', 'owner'], {
         allowNull: false,
+        defaultValue: 'member',
+      }),
+      joined_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
       },
-      expires_at: DataTypes.DATE,
-      consumed_at: DataTypes.DATE,
     },
     {
       sequelize,
-      modelName: 'OtpCode',
-      tableName: 'otp_codes',
+      modelName: 'GroupMember',
+      tableName: 'group_members',
+      paranoid: true,
     }
   );
 
-  return OtpCode;
+  return GroupMember;
 };

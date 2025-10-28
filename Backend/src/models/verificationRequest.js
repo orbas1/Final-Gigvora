@@ -1,6 +1,7 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { jsonColumn, enumColumn } = require('./helpers/columnTypes');
 
 module.exports = (sequelize) => {
   class VerificationRequest extends Model {}
@@ -8,6 +9,10 @@ module.exports = (sequelize) => {
   VerificationRequest.init(
     {
       id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+      subject_type: enumColumn(sequelize, DataTypes, ['user', 'org']),
+      subject_id: DataTypes.UUID,
+      status: enumColumn(sequelize, DataTypes, ['pending', 'verified', 'rejected']),
+      data: jsonColumn(sequelize, DataTypes),
       subject_type: { type: DataTypes.ENUM('user', 'org'), allowNull: false },
       subject_id: { type: DataTypes.UUID, allowNull: false },
       status: {

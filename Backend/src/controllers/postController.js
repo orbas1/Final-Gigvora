@@ -14,6 +14,26 @@ const validate = (schema, payload) => {
   return value;
 };
 
+const listSchema = Joi.object({
+  feed: Joi.string(),
+  author_id: Joi.string().uuid(),
+  org_id: Joi.string().uuid(),
+  group_id: Joi.string().uuid(),
+  analytics: Joi.boolean().truthy('true').falsy('false'),
+  limit: Joi.number().integer().min(1).max(100),
+  sort: Joi.string(),
+  cursor: Joi.string(),
+  fields: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())),
+  expand: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())),
+});
+const postSchema = Joi.object({
+  content: Joi.string().required(),
+  attachments: Joi.array().items(Joi.object()),
+  share_ref: Joi.object(),
+  group_id: Joi.string().uuid().optional(),
+});
+const commentSchema = Joi.object({ content: Joi.string().required(), parent_id: Joi.string().uuid().optional() });
+const reactionSchema = Joi.object({ type: Joi.string().required() });
 const toArray = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -131,6 +151,8 @@ const list = async (req, res, next) => {
   const started = Date.now();
   let payload;
   try {
+    const payload = validate(listSchema, req.query);
+    const result = await service.listPosts(payload, req.user);
     payload = validate(listSchema, req.query);
     payload.expand = toArray(req.query.expand ?? payload.expand);
     payload.fields = toArray(req.query.fields ?? payload.fields);
@@ -166,6 +188,9 @@ const list = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
+    const payload = validate(postSchema, req.body);
+    const result = await service.createPost(req.user, payload);
+    res.status(201).json(result);
     const payload = validate(postCreateSchema, req.body);
     const post = await service.createPost(req.user, payload);
     await persistIdempotentResponse(req, res, { status: 201, body: post });
@@ -177,6 +202,8 @@ const create = async (req, res, next) => {
 
 const get = async (req, res, next) => {
   try {
+    const result = await service.getPost(req.params.id, req.user);
+    res.json(result);
     const payload = validate(postGetSchema, req.query);
     const expand = toArray(req.query.expand ?? payload.expand);
     const fields = toArray(req.query.fields ?? payload.fields);
@@ -200,6 +227,9 @@ const get = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
+    const payload = validate(postSchema, req.body);
+    const result = await service.updatePost(req.params.id, req.user, payload);
+    res.json(result);
     const payload = validate(postUpdateSchema, req.body);
     if (!Object.keys(payload).length) {
       throw new ApiError(400, 'No changes supplied', 'VALIDATION_ERROR');
@@ -222,6 +252,9 @@ const remove = async (req, res, next) => {
 
 const listComments = async (req, res, next) => {
   try {
+    const payload = validate(commentSchema, req.body);
+    const result = await service.createComment(req.user, req.params.id, payload);
+    res.status(201).json(result);
     const payload = validate(commentListSchema, req.query);
     payload.expand = toArray(req.query.expand ?? payload.expand);
     payload.include = toArray(req.query.include ?? payload.include);
@@ -237,6 +270,8 @@ const listComments = async (req, res, next) => {
 
 const createComment = async (req, res, next) => {
   try {
+    const payload = validate(reactionSchema, req.body);
+    const result = await service.react(req.user, req.params.id, payload);
     const payload = validate(commentCreateSchema, req.body);
     const comment = await service.createComment(req.user.id, req.params.postId, payload);
     await persistIdempotentResponse(req, res, { status: 201, body: comment });
@@ -277,6 +312,7 @@ const addReaction = async (req, res, next) => {
 
 const removeReaction = async (req, res, next) => {
   try {
+    const result = await service.removeReaction(req.user, req.params.id);
     const payload = validate(reactionDeleteSchema, req.query);
     const result = await service.removeReaction(req.user.id, req.params.id, payload);
     res.json(result);
