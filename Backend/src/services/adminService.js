@@ -1,3 +1,12 @@
+const {
+  User,
+  Profile,
+  Dispute,
+  DisputeMessage,
+  DisputeEvidence,
+  DisputeSettlement,
+  DisputeDecision,
+} = require('../models');
 const { User, Profile, Company, Agency, CompanyEmployee, AgencyMember } = require('../models');
 const { User, Profile, Group } = require('../models');
 const { User, Profile, Post, Comment, sequelize } = require('../models');
@@ -142,6 +151,21 @@ const restore = async ({ entity_type, id }, currentUser) => {
     }
     default:
       throw new ApiError(400, 'Unsupported entity type for restore', 'INVALID_ENTITY_TYPE');
+  }
+  if (entity_type === 'dispute') {
+    await Dispute.restore({ where: { id } });
+  }
+  if (entity_type === 'dispute_message') {
+    await DisputeMessage.restore({ where: { id } });
+  }
+  if (entity_type === 'dispute_evidence') {
+    await DisputeEvidence.restore({ where: { id } });
+  }
+  if (entity_type === 'dispute_settlement') {
+    await DisputeSettlement.restore({ where: { id } });
+  }
+  if (entity_type === 'dispute_decision') {
+    await DisputeDecision.restore({ where: { id } });
   }
 const RESTORABLE = {
   user: User,

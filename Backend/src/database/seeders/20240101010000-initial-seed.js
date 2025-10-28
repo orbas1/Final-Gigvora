@@ -60,6 +60,7 @@ module.exports = {
       replacements: { email: adminEmail },
     });
 
+    const now = new Date();
     if (!existing.length) {
       const now = new Date();
       const agencyOrgId = uuid();
@@ -112,6 +113,23 @@ module.exports = {
       ]);
     }
 
+    const [existingDisputes] = await queryInterface.sequelize.query(
+      'SELECT id FROM disputes WHERE entity_ref = :ref LIMIT 1',
+      { replacements: { ref: 'order-1001' } }
+    );
+
+    if (!existingDisputes.length) {
+      const disputeId = require('uuid').v4();
+      const dialect = queryInterface.sequelize.getDialect();
+      await queryInterface.bulkInsert('disputes', [
+        {
+          id: disputeId,
+          entity_type: 'order',
+          entity_ref: 'order-1001',
+          status: 'open',
+          reason: 'non_delivery',
+          details: 'Client reports that deliverables were not received by the expected deadline.',
+          created_by: adminId,
     const [[existingTag] = []] = await queryInterface.sequelize.query(
       'SELECT id FROM tags WHERE name = :name LIMIT 1',
       { replacements: { name: TAG_NAME } }
@@ -291,6 +309,13 @@ module.exports = {
         },
       ]);
 
+      await queryInterface.bulkInsert('dispute_messages', [
+        {
+          id: require('uuid').v4(),
+          dispute_id: disputeId,
+          user_id: adminId,
+          body: 'Dispute initiated to review non-delivery claim.',
+          visibility: 'internal',
       const operationsSkillId = uuid();
       const complianceSkillId = uuid();
       await queryInterface.bulkInsert('skills', [
@@ -351,6 +376,17 @@ module.exports = {
           updated_at: now,
         },
       ]);
+
+      await queryInterface.bulkInsert('dispute_evidence', [
+        {
+          id: require('uuid').v4(),
+          dispute_id: disputeId,
+          user_id: adminId,
+          kind: 'note',
+          title: 'Initial intake summary',
+          description: 'Admin captured summary of the conversation with both parties.',
+          metadata:
+            dialect === 'sqlite' ? JSON.stringify({ source: 'support_call' }) : { source: 'support_call' },
     }
 
     const [[existingGroupTag] = []] = await queryInterface.sequelize.query(
@@ -800,6 +836,9 @@ module.exports = {
     await queryInterface.bulkDelete('networking_lobbies', null, {});
     await queryInterface.bulkDelete('profiles', null, {});
     await queryInterface.bulkDelete('users', { email: 'admin@gigvora.test' }, {});
+    await queryInterface.bulkDelete('dispute_messages', { visibility: 'internal' }, {});
+    await queryInterface.bulkDelete('dispute_evidence', { kind: 'note' }, {});
+    await queryInterface.bulkDelete('disputes', { entity_ref: 'order-1001' }, {});
     await queryInterface.bulkDelete('users', { email: 'owner@acme.test' }, {});
     await queryInterface.bulkDelete('users', { email: 'lead@creativehub.test' }, {});
   },
