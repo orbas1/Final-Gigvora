@@ -48,6 +48,8 @@ const baseConfig = {
     autoApprove: process.env.VERIFICATION_AUTO_APPROVE
       ? process.env.VERIFICATION_AUTO_APPROVE === 'true'
       : false,
+  realtime: {
+    messageEditWindowMinutes: Number(process.env.MESSAGE_EDIT_WINDOW_MINUTES || 15),
   },
   otp: {
     ttlMinutes: Number(process.env.OTP_TTL_MINUTES || 10),
