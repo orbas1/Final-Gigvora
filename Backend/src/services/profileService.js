@@ -154,6 +154,168 @@ const getProfile = async (userId, { includeDeleted = false, expand = [] } = {}) 
 
   const profile = await Profile.findOne({
     where: { user_id: userId },
+
+const parseDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const buildRangeFilter = (from, to) => {
+  const range = {};
+  const fromDate = parseDate(from);
+  const toDate = parseDate(to);
+
+  if (fromDate) {
+    range[Op.gte] = fromDate;
+  }
+
+  if (toDate) {
+    range[Op.lte] = toDate;
+  }
+
+  return range;
+};
+
+const applyRangeFilter = (where, field, from, to) => {
+  const range = buildRangeFilter(from, to);
+  if (Object.keys(range).length) {
+    where[field] = range;
+  }
+};
+
+const getCursorValue = (row, field) => {
+  if (!row) return undefined;
+  if (typeof row.get === 'function') {
+    const value = row.get(field);
+    if (value !== undefined) return value;
+  }
+  return row[field];
+};
+
+const ensureProfileByUser = async (userId, { includeDeleted = false, transaction } = {}) => {
+  const profile = await Profile.findOne({
+    where: { user_id: userId },
+    paranoid: !includeDeleted,
+    transaction,
+  });
+  if (!profile) {
+    throw new ApiError(404, 'Profile not found', 'PROFILE_NOT_FOUND');
+  }
+  return profile;
+};
+
+const resolveProfile = async (identifier, { includeDeleted = false } = {}) => {
+  const profile =
+    (await Profile.findByPk(identifier, { paranoid: !includeDeleted })) ||
+    (await Profile.findOne({ where: { user_id: identifier }, paranoid: !includeDeleted }));
+  if (!profile) {
+    throw new ApiError(404, 'Profile not found', 'PROFILE_NOT_FOUND');
+  }
+  return profile;
+};
+
+const paginateRecords = async (
+  model,
+  {
+    where,
+    pagination,
+    includeDeleted = false,
+    analytics = false,
+    include = [],
+    orderFallback = [['created_at', 'DESC']],
+  }
+) => {
+  const limit = pagination.limit;
+  const baseWhere = where ? { ...where } : {};
+  if (pagination.cursorValue !== undefined && pagination.cursorValue !== null) {
+    const existingConstraint = baseWhere[pagination.sortField];
+    if (existingConstraint && typeof existingConstraint === 'object' && !Array.isArray(existingConstraint)) {
+      baseWhere[pagination.sortField] = {
+        ...existingConstraint,
+        [pagination.cursorOperator]: pagination.cursorValue,
+      };
+    } else if (existingConstraint !== undefined) {
+      baseWhere[pagination.sortField] = {
+        [Op.eq]: existingConstraint,
+        [pagination.cursorOperator]: pagination.cursorValue,
+      };
+    } else {
+      baseWhere[pagination.sortField] = { [pagination.cursorOperator]: pagination.cursorValue };
+    }
+  }
+
+  const queryOptions = {
+    where: baseWhere,
+    order: pagination.order.length ? pagination.order : orderFallback,
+    limit: limit + 1,
+    paranoid: !includeDeleted,
+    include,
+  };
+
+  const rows = await model.findAll(queryOptions);
+  const hasNext = rows.length > limit;
+  const data = hasNext ? rows.slice(0, limit) : rows;
+  const last = data[data.length - 1];
+  const nextCursor = hasNext ? encodeCursor(getCursorValue(last, pagination.sortField)) : null;
+
+  const response = { data, next_cursor: nextCursor };
+
+  if (analytics) {
+    const total = await model.count({ where, paranoid: !includeDeleted, include });
+    response.analytics = { total };
+  }
+
+  return response;
+};
+
+const normalizeSkillInput = (entries = []) =>
+  entries
+    .map((entry) =>
+      typeof entry === 'string'
+        ? { name: entry.trim(), proficiency: null }
+        : { name: entry.name?.trim(), proficiency: entry.proficiency ?? null }
+    )
+    .filter((entry) => entry.name);
+
+const normalizeTagInput = (entries = []) =>
+  entries
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : entry.name?.trim()))
+    .filter(Boolean);
+
+const getProfile = async (userId, { includeDeleted = false, expand = [] } = {}) => {
+  const expansions = new Set(expand);
+  if (expansions.size === 0) {
+    ['experiences', 'education', 'portfolio', 'reviews', 'skills', 'tags', 'freelancer_overlay'].forEach((key) =>
+      expansions.add(key)
+    );
+  }
+
+  const include = [];
+  if (expansions.has('experiences')) {
+    include.push({ model: ProfileExperience, as: 'experiences', paranoid: !includeDeleted });
+  }
+  if (expansions.has('education')) {
+    include.push({ model: ProfileEducation, as: 'education', paranoid: !includeDeleted });
+  }
+  if (expansions.has('portfolio')) {
+    include.push({ model: PortfolioItem, as: 'portfolio', paranoid: !includeDeleted });
+  }
+  if (expansions.has('reviews')) {
+    include.push({ model: Review, as: 'reviews', paranoid: !includeDeleted });
+  }
+  if (expansions.has('skills')) {
+    include.push({ model: Skill, as: 'skills' });
+  }
+  if (expansions.has('tags')) {
+    include.push({ model: Tag, as: 'tags' });
+  }
+  if (expansions.has('freelancer_overlay')) {
+    include.push({ model: FreelancerProfile, as: 'freelancer_overlay', paranoid: !includeDeleted });
+  }
+
+  const profile = await Profile.findOne({
+    where: { user_id: userId },
     include,
     paranoid: !includeDeleted,
   });
@@ -364,6 +526,32 @@ const upsertTags = async (userId, tagEntries) => {
   });
 };
 
+};
+
+const upsertTags = async (userId, tagEntries) => {
+  const normalized = normalizeTagInput(tagEntries);
+  if (!normalized.length) {
+    return { data: [] };
+  }
+
+  return sequelize.transaction(async (transaction) => {
+    const profile = await ensureProfileByUser(userId, { transaction });
+    const tagIds = [];
+    for (const name of normalized) {
+      const [tag] = await Tag.findOrCreate({ where: { name }, defaults: { description: null }, transaction });
+      tagIds.push(tag.id);
+      await ProfileTag.findOrCreate({
+        where: { profile_id: profile.id, tag_id: tag.id },
+        transaction,
+      });
+    }
+
+    await ProfileTag.destroy({ where: { profile_id: profile.id, tag_id: { [Op.notIn]: tagIds } }, transaction });
+    const tags = await profile.getTags({ order: [['name', 'ASC']], transaction });
+    return { data: tags };
+  });
+};
+
 const deleteTags = async (userId, identifiers = []) => {
   const profile = await ensureProfileByUser(userId);
   if (!identifiers.length) {
@@ -514,6 +702,23 @@ const engagementAnalytics = async ({ id, from, to }) => {
         [Op.or]: [{ channel: 'message' }, { type: { [Op.like]: 'message%' } }],
       },
     }),
+
+  const viewWhere = { profile_id: profile.id };
+  applyRangeFilter(viewWhere, 'viewed_at', from, to);
+
+  const followWhere = { followee_id: profile.user_id };
+  applyRangeFilter(followWhere, 'created_at', from, to);
+
+  const messageWhere = {
+    user_id: profile.user_id,
+    [Op.or]: [{ channel: 'message' }, { type: { [Op.like]: 'message%' } }],
+  };
+  applyRangeFilter(messageWhere, 'created_at', from, to);
+
+  const [views, follows, messages] = await Promise.all([
+    ProfileView.count({ where: viewWhere }),
+    UserFollow.count({ where: followWhere }),
+    Notification.count({ where: messageWhere }),
   ]);
 
   return { views, follows, messages };
@@ -537,6 +742,23 @@ const topProfiles = async ({ metric = 'views', from, to, limit = 10 } = {}) => {
   if (metric === 'follows') {
     const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     query = `
+  const filters = ['p.deleted_at IS NULL'];
+
+  const fromDate = parseDate(from);
+  const toDate = parseDate(to);
+
+  if (metric === 'follows') {
+    if (fromDate) {
+      filters.push('uf.created_at >= :from');
+      replacements.from = fromDate;
+    }
+    if (toDate) {
+      filters.push('uf.created_at <= :to');
+      replacements.to = toDate;
+    }
+
+    const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const query = `
       SELECT p.id, p.display_name, p.user_id, COUNT(uf.followee_id) AS score
       FROM profiles p
       JOIN user_follows uf ON uf.followee_id = p.user_id
@@ -558,12 +780,64 @@ const topProfiles = async ({ metric = 'views', from, to, limit = 10 } = {}) => {
     `;
   }
 
+    const [rows] = await sequelize.query(query, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT,
+    });
+
+    return rows.map((row) => ({ ...row, metric, score: Number(row.score) }));
+  }
+
+  if (fromDate) {
+    filters.push('pv.viewed_at >= :from');
+    replacements.from = fromDate;
+  }
+  if (toDate) {
+    filters.push('pv.viewed_at <= :to');
+    replacements.to = toDate;
+  }
+
+  const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const query = `
+    SELECT p.id, p.display_name, p.user_id, COUNT(pv.id) AS score
+    FROM profiles p
+    JOIN profile_views pv ON pv.profile_id = p.id
+    ${whereClause}
+    GROUP BY p.id, p.display_name, p.user_id
+    ORDER BY score DESC, p.display_name ASC
+    LIMIT :limit
+  `;
+
   const [rows] = await sequelize.query(query, {
     replacements,
     type: sequelize.QueryTypes.SELECT,
   });
 
   return rows.map((row) => ({ ...row, metric, score: Number(row.score) }));
+};
+
+const getFreelancerOverlay = async (userId, { includeDeleted = false } = {}) => {
+  const profile = await ensureProfileByUser(userId, { includeDeleted });
+  const overlay = await FreelancerProfile.findOne({
+    where: { profile_id: profile.id },
+    paranoid: !includeDeleted,
+  });
+  if (!overlay) {
+    throw new ApiError(404, 'Freelancer overlay not found', 'FREELANCER_OVERLAY_NOT_FOUND');
+  }
+  return overlay;
+};
+
+const updateFreelancerOverlay = async (userId, payload) => {
+  const profile = await ensureProfileByUser(userId);
+  const [overlay] = await FreelancerProfile.findOrCreate({
+    where: { profile_id: profile.id },
+    defaults: { ...payload, profile_id: profile.id },
+  });
+  await overlay.update(payload);
+  return overlay;
+};
+
 };
 
 const getFreelancerOverlay = async (userId, { includeDeleted = false } = {}) => {
