@@ -13,14 +13,18 @@ module.exports = (sequelize) => {
   SupportMessage.init(
     {
       id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-      ticket_id: DataTypes.UUID,
-      user_id: DataTypes.UUID,
-      body: DataTypes.TEXT,
+      ticket_id: { type: DataTypes.UUID, allowNull: false },
+      user_id: { type: DataTypes.UUID, allowNull: true },
+      body: { type: DataTypes.TEXT, allowNull: false },
     },
     {
       sequelize,
       modelName: 'SupportMessage',
       tableName: 'support_messages',
+      underscored: true,
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     }
   );
 

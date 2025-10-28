@@ -21,6 +21,10 @@ module.exports = (sequelize) => {
       sequelize,
       modelName: 'ProfileSkill',
       tableName: 'profile_skills',
+      underscored: true,
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
     }
   );
 

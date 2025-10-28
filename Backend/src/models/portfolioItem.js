@@ -29,6 +29,12 @@ module.exports = (sequelize) => {
       sequelize,
       modelName: 'PortfolioItem',
       tableName: 'portfolio_items',
+      underscored: true,
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      paranoid: true,
+      deletedAt: 'deleted_at',
     }
   );
 
