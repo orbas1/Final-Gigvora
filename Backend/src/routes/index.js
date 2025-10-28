@@ -12,6 +12,7 @@ const supportRoutes = require('./supportRoutes');
 const verificationRoutes = require('./verificationRoutes');
 const webhookRoutes = require('./webhookRoutes');
 const legalRoutes = require('./legalRoutes');
+const feedRoutes = require('./feedRoutes');
 const { idempotencyMiddleware } = require('../middleware/idempotency');
 
 const router = express.Router();
@@ -30,5 +31,6 @@ router.use('/support', supportRoutes);
 router.use('/verification', verificationRoutes);
 router.use('/webhooks', webhookRoutes);
 router.use('/legal', legalRoutes);
+router.use('/feed', feedRoutes);
 
 module.exports = router;
