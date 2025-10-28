@@ -31,14 +31,17 @@ const auth = (required = true) => async (req, res, next) => {
   }
 };
 
-const requireRole = (role) => (req, res, next) => {
-  if (!req.user) {
-    return next(new ApiError(401, 'Authentication required', 'AUTH_REQUIRED'));
-  }
-  if (req.user.role !== role) {
-    return next(new ApiError(403, 'Forbidden', 'FORBIDDEN'));
-  }
-  return next();
+const requireRole = (...roles) => {
+  const allowed = roles.flat().filter(Boolean);
+  return (req, res, next) => {
+    if (!req.user) {
+      return next(new ApiError(401, 'Authentication required', 'AUTH_REQUIRED'));
+    }
+    if (allowed.length && !allowed.includes(req.user.role)) {
+      return next(new ApiError(403, 'Forbidden', 'FORBIDDEN'));
+    }
+    return next();
+  };
 };
 
 module.exports = { auth, requireRole };

@@ -12,6 +12,12 @@ const supportRoutes = require('./supportRoutes');
 const verificationRoutes = require('./verificationRoutes');
 const webhookRoutes = require('./webhookRoutes');
 const legalRoutes = require('./legalRoutes');
+const searchRoutes = require('./searchRoutes');
+const organizationRoutes = require('./organizationRoutes');
+const projectRoutes = require('./projectRoutes');
+const gigRoutes = require('./gigRoutes');
+const jobRoutes = require('./jobRoutes');
+const groupRoutes = require('./groupRoutes');
 const { idempotencyMiddleware } = require('../middleware/idempotency');
 
 const router = express.Router();
@@ -30,5 +36,11 @@ router.use('/support', supportRoutes);
 router.use('/verification', verificationRoutes);
 router.use('/webhooks', webhookRoutes);
 router.use('/legal', legalRoutes);
+router.use('/search', searchRoutes);
+router.use('/organizations', organizationRoutes);
+router.use('/projects', projectRoutes);
+router.use('/gigs', gigRoutes);
+router.use('/jobs', jobRoutes);
+router.use('/groups', groupRoutes);
 
 module.exports = router;

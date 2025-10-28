@@ -1,4 +1,5 @@
-const { User, Profile, sequelize } = require('../models');
+const { User, Profile, Organization, Project, Gig, Job, Group } = require('../models');
+const { ApiError } = require('../middleware/errorHandler');
 
 const overview = async ({ from, to }) => {
   const totalUsers = await User.count();
@@ -8,11 +9,24 @@ const overview = async ({ from, to }) => {
 const listUsers = async () => User.findAll({ limit: 100 });
 
 const restore = async ({ entity_type, id }) => {
-  if (entity_type === 'user') {
-    await User.restore({ where: { id } });
+  const mapping = {
+    user: User,
+    profile: Profile,
+    organization: Organization,
+    project: Project,
+    gig: Gig,
+    job: Job,
+    group: Group,
+  };
+
+  const model = mapping[entity_type];
+  if (!model) {
+    throw new ApiError(400, `Unsupported entity_type: ${entity_type}`, 'UNSUPPORTED_ENTITY_TYPE');
   }
-  if (entity_type === 'profile') {
-    await Profile.restore({ where: { id } });
+
+  const restored = await model.restore({ where: { id } });
+  if (!restored) {
+    throw new ApiError(404, 'Entity not found', 'ENTITY_NOT_FOUND');
   }
   return { success: true };
 };
