@@ -23,6 +23,8 @@ module.exports = (sequelize) => {
       });
       this.hasMany(models.PortfolioItem, { foreignKey: 'profile_id', as: 'portfolio' });
       this.hasMany(models.Review, { foreignKey: 'profile_id', as: 'reviews' });
+      this.hasOne(models.FreelancerProfile, { foreignKey: 'profile_id', as: 'freelancer_overlay' });
+      this.hasMany(models.ProfileView, { foreignKey: 'profile_id', as: 'views' });
     }
   }
 
@@ -55,6 +57,12 @@ module.exports = (sequelize) => {
       sequelize,
       modelName: 'Profile',
       tableName: 'profiles',
+      underscored: true,
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      paranoid: true,
+      deletedAt: 'deleted_at',
     }
   );
 
