@@ -3,16 +3,17 @@
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-  class Comment extends Model {
+  class PostShare extends Model {
     static associate(models) {
       this.belongsTo(models.Post, { foreignKey: 'post_id', as: 'post' });
-      this.belongsTo(models.User, { foreignKey: 'user_id', as: 'author' });
-      this.hasMany(models.Comment, { foreignKey: 'parent_id', as: 'replies' });
-      this.belongsTo(models.Comment, { foreignKey: 'parent_id', as: 'parent' });
+      this.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
     }
   }
 
-  Comment.init(
+  const dialect = sequelize.getDialect();
+  const jsonType = dialect === 'postgres' ? DataTypes.JSONB : DataTypes.JSON;
+
+  PostShare.init(
     {
       id: {
         type: DataTypes.UUID,
@@ -27,22 +28,27 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      content: {
-        type: DataTypes.TEXT,
-        allowNull: false,
+      channel: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
-      parent_id: {
-        type: DataTypes.UUID,
+      message: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      metadata: {
+        type: jsonType,
         allowNull: true,
       },
     },
     {
       sequelize,
-      modelName: 'Comment',
-      tableName: 'comments',
-      paranoid: true,
+      modelName: 'PostShare',
+      tableName: 'post_shares',
+      updatedAt: 'updated_at',
+      createdAt: 'created_at',
     }
   );
 
-  return Comment;
+  return PostShare;
 };

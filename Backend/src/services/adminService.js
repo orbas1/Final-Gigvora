@@ -1,3 +1,4 @@
+const { User, Profile, Post, Comment, sequelize } = require('../models');
 const { User, Profile, LegalDocument, LegalConsent, WebhookSubscription, WebhookDelivery } = require('../models');
 const { User, Profile } = require('../models');
 const { ApiError } = require('../middleware/errorHandler');
@@ -187,6 +188,21 @@ const RESTORE_MODELS = {
 };
 
 const restore = async ({ entity_type, id }) => {
+  switch (entity_type) {
+    case 'user':
+      await User.restore({ where: { id } });
+      break;
+    case 'profile':
+      await Profile.restore({ where: { id } });
+      break;
+    case 'post':
+      await Post.restore({ where: { id } });
+      break;
+    case 'comment':
+      await Comment.restore({ where: { id } });
+      break;
+    default:
+      throw new ApiError(400, `Unsupported entity type: ${entity_type}`, 'UNSUPPORTED_ENTITY');
   const model = RESTORE_MODELS[entity_type];
   if (!model) {
     throw new ApiError(400, `Unsupported entity type: ${entity_type}`, 'UNSUPPORTED_RESTORE');
