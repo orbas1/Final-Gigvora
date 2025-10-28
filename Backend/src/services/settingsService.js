@@ -8,6 +8,12 @@ const {
   UserSetting,
   Session,
   ApiToken,
+  Connection,
+  UserFollow,
+  Post,
+  Notification,
+  UserBlock,
+  UserReport,
   sequelize,
 } = require('../models');
 const { ApiError } = require('../middleware/errorHandler');
@@ -73,6 +79,126 @@ const SECTION_DEFAULTS = {
     border_radius: 6,
     custom_tokens: {},
   },
+};
+
+const cloneSectionDefaults = (section) => merge({}, SECTION_DEFAULTS[section] || {});
+
+const buildAccountAnalytics = async (userId) => {
+  const [connections, followers, following, posts, activeTokens, activeSessions] = await Promise.all([
+    Connection.count({
+      where: {
+        status: 'accepted',
+        [Op.or]: [{ requester_id: userId }, { addressee_id: userId }],
+      },
+    }),
+    UserFollow.count({ where: { followee_id: userId } }),
+    UserFollow.count({ where: { follower_id: userId } }),
+    Post.count({ where: { user_id: userId } }),
+    ApiToken.count({ where: { user_id: userId, revoked_at: null } }),
+    Session.count({ where: { user_id: userId, revoked_at: null } }),
+  ]);
+
+  return {
+    connections_total: connections,
+    followers_total: followers,
+    following_total: following,
+    posts_published: posts,
+    api_tokens_active: activeTokens,
+    active_sessions: activeSessions,
+  };
+};
+
+const buildPrivacyAnalytics = async (userId) => {
+  const [blocked, blockedBy, reportsMade, reportsReceived] = await Promise.all([
+    UserBlock.count({ where: { blocker_id: userId } }),
+    UserBlock.count({ where: { blocked_id: userId } }),
+    UserReport.count({ where: { reporter_id: userId } }),
+    UserReport.count({ where: { reported_id: userId } }),
+  ]);
+
+  return {
+    blocked_users: blocked,
+    blocked_by_users: blockedBy,
+    reports_made: reportsMade,
+    reports_received: reportsReceived,
+  };
+};
+
+const buildNotificationAnalytics = async (userId) => {
+  const where = { user_id: userId };
+  const [total, unread, byChannel, lastNotification] = await Promise.all([
+    Notification.count({ where }),
+    Notification.count({ where: { ...where, read_at: null } }),
+    Notification.findAll({
+      where,
+      attributes: ['channel', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      group: ['channel'],
+    }),
+    Notification.findOne({ where, order: [['created_at', 'DESC']], attributes: ['created_at'] }),
+  ]);
+
+  const channelBreakdown = byChannel.reduce((acc, row) => {
+    const plain = row.get({ plain: true });
+    acc[plain.channel || 'unknown'] = Number(plain.count) || 0;
+    return acc;
+  }, {});
+
+  return {
+    total_notifications: total,
+    unread_notifications: unread,
+    last_notification_at: lastNotification?.created_at || null,
+    channel_breakdown: channelBreakdown,
+  };
+};
+
+const buildPaymentsAnalytics = (payments) => {
+  const normalized = merge({}, SECTION_DEFAULTS.payments, payments || {});
+  const linkedAccounts = Array.isArray(normalized.linked_accounts) ? normalized.linked_accounts : [];
+  return {
+    linked_accounts_count: linkedAccounts.length,
+    default_method_configured: Boolean(normalized.default_method),
+    automatic_withdrawal_enabled: Boolean(normalized.automatic_withdrawal),
+    tax_form_status: normalized.tax_form_status || SECTION_DEFAULTS.payments.tax_form_status,
+    payout_schedule: normalized.payout_schedule || SECTION_DEFAULTS.payments.payout_schedule,
+    currency: normalized.currency || SECTION_DEFAULTS.payments.currency,
+  };
+};
+
+const buildThemeAnalytics = (theme) => {
+  const normalized = merge({}, SECTION_DEFAULTS.theme, theme || {});
+  const customTokens = normalized.custom_tokens || {};
+  const customTokenKeys = Object.keys(customTokens);
+  const isCustomized =
+    normalized.mode !== SECTION_DEFAULTS.theme.mode ||
+    normalized.primary_color !== SECTION_DEFAULTS.theme.primary_color ||
+    normalized.accent_color !== SECTION_DEFAULTS.theme.accent_color ||
+    normalized.font_scale !== SECTION_DEFAULTS.theme.font_scale ||
+    normalized.border_radius !== SECTION_DEFAULTS.theme.border_radius ||
+    customTokenKeys.length > 0;
+
+  return {
+    is_customized: isCustomized,
+    custom_tokens_count: customTokenKeys.length,
+    mode: normalized.mode,
+    primary_color: normalized.primary_color,
+    accent_color: normalized.accent_color,
+    font_scale: normalized.font_scale,
+    border_radius: normalized.border_radius,
+  };
+};
+
+const buildTokenAnalytics = async (userId) => {
+  const [active, revoked, total] = await Promise.all([
+    ApiToken.count({ where: { user_id: userId, revoked_at: null } }),
+    ApiToken.count({ where: { user_id: userId, revoked_at: { [Op.ne]: null } }, paranoid: false }),
+    ApiToken.count({ where: { user_id: userId }, paranoid: false }),
+  ]);
+
+  return {
+    active_tokens: active,
+    revoked_tokens: revoked,
+    total_tokens: total,
+  };
 };
 
 const splitFieldPaths = (value) =>
@@ -144,23 +270,31 @@ const filterAccountResponse = (response, fields) => {
 };
 
 const getAccount = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const user = await User.findByPk(userId);
   if (!user) {
     throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
   }
   const settings = await ensureSettings(userId);
-  const account = settings.get('account') || SECTION_DEFAULTS.account;
+  const account = merge({}, SECTION_DEFAULTS.account, settings.get('account') || {});
 
-  const response = {
-    user: sanitizeUser(user),
-    account,
-  };
+  const baseResponse = filterAccountResponse(
+    {
+      user: sanitizeUser(user),
+      account,
+    },
+    splitFieldPaths(options.fields)
+  );
 
-  const fields = splitFieldPaths(options.fields);
-  return filterAccountResponse(response, fields);
+  if (includeAnalytics) {
+    baseResponse.analytics = await buildAccountAnalytics(userId);
+  }
+
+  return baseResponse;
 };
 
-const updateAccount = async (userId, payload) => {
+const updateAccount = async (userId, payload, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const user = await User.scope('withSensitive').findByPk(userId);
   if (!user) {
     throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
@@ -197,10 +331,16 @@ const updateAccount = async (userId, payload) => {
   }
 
   const sanitized = await User.findByPk(userId);
-  return {
+  const result = {
     user: sanitizeUser(sanitized),
-    account: settings.get('account'),
+    account: merge({}, SECTION_DEFAULTS.account, settings.get('account') || {}),
   };
+
+  if (includeAnalytics) {
+    result.analytics = await buildAccountAnalytics(userId);
+  }
+
+  return result;
 };
 
 const generateRecoveryCode = () => {
@@ -230,10 +370,21 @@ const listDevices = async (userId, { includeDeleted = false, currentSessionId, a
 
   let summary;
   if (analytics) {
-    const activeDevices = sessions.filter((session) => !session.revoked_at && (!session.expires_at || session.expires_at > new Date()))
-      .length;
+    const now = new Date();
+    const activeDevices = sessions.filter(
+      (session) => !session.revoked_at && (!session.expires_at || session.expires_at > now)
+    ).length;
     const revokedDevices = sessions.filter((session) => session.revoked_at).length;
-    summary = { active_devices: activeDevices, revoked_devices: revokedDevices };
+    const expiredDevices = sessions.filter(
+      (session) => !session.revoked_at && session.expires_at && session.expires_at <= now
+    ).length;
+    const lastActivity = sessions[0]?.updated_at || sessions[0]?.created_at || null;
+    summary = {
+      active_devices: activeDevices,
+      revoked_devices: revokedDevices,
+      expired_devices: expiredDevices,
+      last_activity_at: lastActivity,
+    };
   }
 
   return { devices, analytics: summary };
@@ -241,15 +392,16 @@ const listDevices = async (userId, { includeDeleted = false, currentSessionId, a
 
 const getSecurity = async (userId, options = {}) => {
   const settings = await ensureSettings(userId);
-  const security = settings.get('security') || SECTION_DEFAULTS.security;
+  const security = merge({}, SECTION_DEFAULTS.security, settings.get('security') || {});
   const includeDeleted = options.includeDeleted === true;
+  const includeAnalytics = Boolean(options.analytics);
   const { devices, analytics } = await listDevices(userId, {
     includeDeleted,
     currentSessionId: options.currentSessionId,
-    analytics: options.analytics === 'true',
+    analytics: includeAnalytics,
   });
 
-  return {
+  const response = {
     security: {
       two_factor_enabled: Boolean(security.two_factor_enabled),
       login_alerts: Boolean(security.login_alerts),
@@ -258,8 +410,23 @@ const getSecurity = async (userId, options = {}) => {
       totp_issuer: security.totp_issuer || SECTION_DEFAULTS.security.totp_issuer,
     },
     devices,
-    analytics,
   };
+
+  if (includeAnalytics) {
+    response.analytics = {
+      ...(analytics || {}),
+      two_factor_enabled: Boolean(security.two_factor_enabled),
+      login_alerts: Boolean(security.login_alerts),
+      recovery_codes_available: Array.isArray(security.recovery_codes)
+        ? security.recovery_codes.length
+        : 0,
+      totp_issuer: security.totp_issuer || SECTION_DEFAULTS.security.totp_issuer,
+    };
+  } else if (analytics) {
+    response.analytics = analytics;
+  }
+
+  return response;
 };
 
 const updateSecurity = async (userContext, payload, options = {}) => {
@@ -269,7 +436,7 @@ const updateSecurity = async (userContext, payload, options = {}) => {
   }
 
   const settings = await ensureSettings(user.id);
-  const security = settings.get('security') || SECTION_DEFAULTS.security;
+  const security = merge({}, SECTION_DEFAULTS.security, settings.get('security') || {});
 
   let recoveryCodes;
 
@@ -322,69 +489,236 @@ const updateSecurity = async (userContext, payload, options = {}) => {
     }
   });
 
+  const includeAnalytics = Boolean(options.analytics);
   const result = await getSecurity(user.id, {
     includeDeleted: options.includeDeleted,
     currentSessionId: options.currentSessionId,
-    analytics: options.analytics,
+    analytics: includeAnalytics,
   });
 
   if (recoveryCodes) {
     result.recovery_codes = recoveryCodes;
+    if (includeAnalytics && result.analytics) {
+      result.analytics.recovery_codes_generated = recoveryCodes.length;
+    }
   }
 
   return result;
 };
 
-const getPrivacy = async (userId) => {
+const getPrivacy = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const settings = await ensureSettings(userId);
-  return settings.get('privacy') || SECTION_DEFAULTS.privacy;
+  const privacy = merge({}, SECTION_DEFAULTS.privacy, settings.get('privacy') || {});
+
+  if (includeAnalytics) {
+    return { privacy, analytics: await buildPrivacyAnalytics(userId) };
+  }
+
+  return privacy;
 };
 
-const updatePrivacy = async (userId, payload) => {
+const updatePrivacy = async (userId, payload, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const settings = await ensureSettings(userId);
-  const merged = merge({}, settings.get('privacy') || SECTION_DEFAULTS.privacy, payload);
+  const merged = merge({}, SECTION_DEFAULTS.privacy, settings.get('privacy') || {}, payload);
   settings.set('privacy', merged);
   await settings.save();
-  return merged;
+
+  if (includeAnalytics) {
+    return { privacy: merge({}, merged), analytics: await buildPrivacyAnalytics(userId) };
+  }
+
+  return merge({}, merged);
 };
 
-const getNotifications = async (userId) => {
+const getNotifications = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const settings = await ensureSettings(userId);
-  return settings.get('notifications') || SECTION_DEFAULTS.notifications;
+  const notifications = merge({}, SECTION_DEFAULTS.notifications, settings.get('notifications') || {});
+
+  if (includeAnalytics) {
+    return { notifications, analytics: await buildNotificationAnalytics(userId) };
+  }
+
+  return notifications;
 };
 
-const updateNotifications = async (userId, payload) => {
+const updateNotifications = async (userId, payload, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const settings = await ensureSettings(userId);
-  const merged = merge({}, settings.get('notifications') || SECTION_DEFAULTS.notifications, payload);
+  const merged = merge({}, SECTION_DEFAULTS.notifications, settings.get('notifications') || {}, payload);
   settings.set('notifications', merged);
   await settings.save();
-  return merged;
+
+  if (includeAnalytics) {
+    return { notifications: merge({}, merged), analytics: await buildNotificationAnalytics(userId) };
+  }
+
+  return merge({}, merged);
 };
 
-const getPayments = async (userId) => {
+const getPayments = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const settings = await ensureSettings(userId);
-  return settings.get('payments') || SECTION_DEFAULTS.payments;
+  const payments = merge({}, SECTION_DEFAULTS.payments, settings.get('payments') || {});
+
+  if (includeAnalytics) {
+    return { payments, analytics: buildPaymentsAnalytics(payments) };
+  }
+
+  return payments;
 };
 
-const updatePayments = async (userId, payload) => {
+const updatePayments = async (userId, payload, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const settings = await ensureSettings(userId);
-  const merged = merge({}, settings.get('payments') || SECTION_DEFAULTS.payments, payload);
+  const merged = merge({}, SECTION_DEFAULTS.payments, settings.get('payments') || {}, payload);
   settings.set('payments', merged);
   await settings.save();
-  return merged;
+
+  if (includeAnalytics) {
+    return { payments: merge({}, merged), analytics: buildPaymentsAnalytics(merged) };
+  }
+
+  return merge({}, merged);
 };
 
-const getTheme = async (userId) => {
+const getTheme = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const settings = await ensureSettings(userId);
-  return settings.get('theme') || SECTION_DEFAULTS.theme;
+  const theme = merge({}, SECTION_DEFAULTS.theme, settings.get('theme') || {});
+
+  if (includeAnalytics) {
+    return { theme, analytics: buildThemeAnalytics(theme) };
+  }
+
+  return theme;
 };
 
-const updateTheme = async (userId, payload) => {
+const updateTheme = async (userId, payload, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
   const settings = await ensureSettings(userId);
-  const merged = merge({}, settings.get('theme') || SECTION_DEFAULTS.theme, payload);
+  const merged = merge({}, SECTION_DEFAULTS.theme, settings.get('theme') || {}, payload);
   settings.set('theme', merged);
   await settings.save();
-  return merged;
+
+  if (includeAnalytics) {
+    return { theme: merge({}, merged), analytics: buildThemeAnalytics(merged) };
+  }
+
+  return merge({}, merged);
+};
+
+const resetAccount = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
+  const user = await User.scope('withSensitive').findByPk(userId);
+  if (!user) {
+    throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  const settings = await ensureSettings(userId);
+  const defaults = cloneSectionDefaults('account');
+  defaults.communication_email = user.email || defaults.communication_email || null;
+  settings.set('account', defaults);
+  await settings.save();
+
+  const sanitized = await User.findByPk(userId);
+  const result = {
+    user: sanitizeUser(sanitized),
+    account: merge({}, SECTION_DEFAULTS.account, settings.get('account') || {}),
+  };
+
+  if (includeAnalytics) {
+    result.analytics = await buildAccountAnalytics(userId);
+  }
+
+  return result;
+};
+
+const resetSecurity = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
+  const includeDeleted = options.includeDeleted === true;
+  const user = await User.scope('withSensitive').findByPk(userId);
+  if (!user) {
+    throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+  }
+
+  await sequelize.transaction(async (transaction) => {
+    user.two_factor_secret = null;
+    await user.save({ transaction });
+
+    const settings = await ensureSettings(userId, transaction);
+    settings.set('security', cloneSectionDefaults('security'));
+    await settings.save({ transaction });
+
+    await Session.update(
+      { revoked_at: new Date() },
+      { where: { user_id: userId }, transaction }
+    );
+  });
+
+  return getSecurity(userId, {
+    includeDeleted,
+    currentSessionId: options.currentSessionId,
+    analytics: includeAnalytics,
+  });
+};
+
+const resetPrivacy = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
+  const settings = await ensureSettings(userId);
+  const defaults = cloneSectionDefaults('privacy');
+  settings.set('privacy', defaults);
+  await settings.save();
+
+  if (includeAnalytics) {
+    return { privacy: merge({}, defaults), analytics: await buildPrivacyAnalytics(userId) };
+  }
+
+  return merge({}, defaults);
+};
+
+const resetNotifications = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
+  const settings = await ensureSettings(userId);
+  const defaults = cloneSectionDefaults('notifications');
+  settings.set('notifications', defaults);
+  await settings.save();
+
+  if (includeAnalytics) {
+    return { notifications: merge({}, defaults), analytics: await buildNotificationAnalytics(userId) };
+  }
+
+  return merge({}, defaults);
+};
+
+const resetPayments = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
+  const settings = await ensureSettings(userId);
+  const defaults = cloneSectionDefaults('payments');
+  settings.set('payments', defaults);
+  await settings.save();
+
+  if (includeAnalytics) {
+    return { payments: merge({}, defaults), analytics: buildPaymentsAnalytics(defaults) };
+  }
+
+  return merge({}, defaults);
+};
+
+const resetTheme = async (userId, options = {}) => {
+  const includeAnalytics = Boolean(options.analytics);
+  const settings = await ensureSettings(userId);
+  const defaults = cloneSectionDefaults('theme');
+  settings.set('theme', defaults);
+  await settings.save();
+
+  if (includeAnalytics) {
+    return { theme: merge({}, defaults), analytics: buildThemeAnalytics(defaults) };
+  }
+
+  return merge({}, defaults);
 };
 
 const serializeToken = (token) => {
@@ -403,6 +737,7 @@ const listApiTokens = async (userContext, query = {}) => {
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean));
+  const includeAnalytics = query.analytics === true || query.analytics === 'true';
 
   const where = { user_id: targetUserId };
   if (query.q) {
@@ -433,12 +768,8 @@ const listApiTokens = async (userContext, query = {}) => {
     : null;
 
   let analytics;
-  if (query.analytics === 'true') {
-    const [active, revoked] = await Promise.all([
-      ApiToken.count({ where: { user_id: targetUserId, revoked_at: null } }),
-      ApiToken.count({ where: { user_id: targetUserId, revoked_at: { [Op.ne]: null } }, paranoid: false }),
-    ]);
-    analytics = { active_tokens: active, revoked_tokens: revoked };
+  if (includeAnalytics) {
+    analytics = await buildTokenAnalytics(targetUserId);
   }
 
   return {
@@ -460,7 +791,7 @@ const randomToken = () =>
     .replace(/\+/g, '-')
     .replace(/\//g, '_')}`;
 
-const createApiToken = async (userContext, payload, { ip, userAgent } = {}) => {
+const createApiToken = async (userContext, payload, { ip, userAgent, analytics: includeAnalytics } = {}) => {
   const tokenValue = randomToken();
   const tokenHash = crypto.createHash('sha256').update(tokenValue).digest('hex');
   const tokenPrefix = tokenValue.slice(0, 8);
@@ -493,13 +824,122 @@ const createApiToken = async (userContext, payload, { ip, userAgent } = {}) => {
   });
 
   const serialized = serializeToken(created);
-  return {
+  const response = {
     token: tokenValue,
     ...serialized,
   };
+
+  if (includeAnalytics) {
+    response.analytics = await buildTokenAnalytics(userContext.id);
+  }
+
+  return response;
 };
 
-const revokeApiToken = async (userContext, tokenId) => {
+const getApiToken = async (userContext, tokenId, options = {}) => {
+  const includeDeleted = userContext.role === 'admin' && Boolean(options.includeDeleted);
+  const includeAnalytics = Boolean(options.analytics);
+  const token = await ApiToken.findByPk(tokenId, { paranoid: !includeDeleted });
+  if (!token) {
+    throw new ApiError(404, 'Token not found', 'TOKEN_NOT_FOUND');
+  }
+
+  if (token.user_id !== userContext.id && userContext.role !== 'admin') {
+    throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+  }
+
+  const serialized = serializeToken(token);
+
+  if (includeAnalytics) {
+    serialized.analytics = await buildTokenAnalytics(token.user_id);
+  }
+
+  return serialized;
+};
+
+const updateApiToken = async (userContext, tokenId, payload, options = {}) => {
+  const includeDeleted = userContext.role === 'admin' && Boolean(options.includeDeleted);
+  const includeAnalytics = Boolean(options.analytics);
+  const token = await ApiToken.findByPk(tokenId, { paranoid: false });
+  if (!token) {
+    throw new ApiError(404, 'Token not found', 'TOKEN_NOT_FOUND');
+  }
+
+  if (token.user_id !== userContext.id && userContext.role !== 'admin') {
+    throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+  }
+
+  if (payload.restore) {
+    if (userContext.role !== 'admin') {
+      throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+    }
+    if (token.deleted_at) {
+      await token.restore();
+      await token.reload({ paranoid: false });
+    }
+    token.revoked_at = null;
+  }
+
+  if (payload.revoke === false && token.revoked_at) {
+    if (userContext.role !== 'admin') {
+      throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+    }
+    token.revoked_at = null;
+    if (token.deleted_at) {
+      await token.restore();
+      await token.reload({ paranoid: false });
+    }
+  }
+
+  if (payload.name !== undefined) {
+    token.name = payload.name;
+  }
+
+  if (payload.scopes !== undefined) {
+    token.scopes = payload.scopes;
+  }
+
+  if (payload.metadata !== undefined) {
+    token.metadata = merge({}, token.metadata || {}, payload.metadata || {});
+  }
+
+  if (payload.expires_at !== undefined) {
+    if (payload.expires_at === null) {
+      token.expires_at = null;
+    } else {
+      const expiresAt = dayjs(payload.expires_at).toDate();
+      if (expiresAt < new Date()) {
+        throw new ApiError(400, 'Expiration must be in the future', 'INVALID_EXPIRATION');
+      }
+      token.expires_at = expiresAt;
+    }
+  }
+
+  if (payload.revoke === true && !token.revoked_at) {
+    token.revoked_at = new Date();
+  }
+
+  await token.save();
+
+  if (payload.revoke === true) {
+    await token.destroy();
+    await token.reload({ paranoid: false });
+  }
+
+  if (!includeDeleted && token.deleted_at) {
+    throw new ApiError(410, 'Token has been revoked', 'TOKEN_REVOKED');
+  }
+
+  const serialized = serializeToken(token);
+
+  if (includeAnalytics) {
+    serialized.analytics = await buildTokenAnalytics(token.user_id);
+  }
+
+  return serialized;
+};
+
+const revokeApiToken = async (userContext, tokenId, options = {}) => {
   const token = await ApiToken.findByPk(tokenId, { paranoid: false });
   if (!token) {
     throw new ApiError(404, 'Token not found', 'TOKEN_NOT_FOUND');
@@ -518,23 +958,37 @@ const revokeApiToken = async (userContext, tokenId) => {
     await token.destroy();
   }
 
-  return { success: true, revoked_at: token.revoked_at };
+  const response = { success: true, revoked_at: token.revoked_at };
+
+  if (Boolean(options.analytics)) {
+    response.analytics = await buildTokenAnalytics(token.user_id);
+  }
+
+  return response;
 };
 
 module.exports = {
   getAccount,
   updateAccount,
+  resetAccount,
   getSecurity,
   updateSecurity,
+  resetSecurity,
   getPrivacy,
   updatePrivacy,
+  resetPrivacy,
   getNotifications,
   updateNotifications,
+  resetNotifications,
   getPayments,
   updatePayments,
+  resetPayments,
   getTheme,
   updateTheme,
+  resetTheme,
   listApiTokens,
+  getApiToken,
   createApiToken,
+  updateApiToken,
   revokeApiToken,
 };

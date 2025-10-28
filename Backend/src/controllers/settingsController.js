@@ -118,9 +118,25 @@ const listTokensSchema = Joi.object({
   include: Joi.string().optional(),
   fields: Joi.string().optional(),
   expand: Joi.string().optional(),
-  analytics: Joi.string().optional(),
+  analytics: Joi.boolean().truthy('true').falsy('false').optional(),
   user_id: Joi.string().guid({ version: 'uuidv4' }).optional(),
 });
+
+const tokenQuerySchema = Joi.object({
+  analytics: Joi.boolean().truthy('true').falsy('false').optional(),
+  include: Joi.string().optional(),
+});
+
+const updateTokenSchema = Joi.object({
+  name: Joi.string().min(3).max(120),
+  scopes: Joi.array().items(Joi.string().pattern(/^[a-z0-9:_-]+$/i)),
+  expires_at: Joi.date().greater('now').allow(null),
+  metadata: Joi.object(),
+  revoke: Joi.boolean(),
+  restore: Joi.boolean(),
+})
+  .or('name', 'scopes', 'expires_at', 'metadata', 'revoke', 'restore')
+  .messages({ 'object.missing': 'At least one property must be provided' });
 
 const includeDeleted = (query, user) => {
   if (!user || user.role !== 'admin') return false;
@@ -130,9 +146,14 @@ const includeDeleted = (query, user) => {
   return values.includes('deleted');
 };
 
+const parseAnalyticsFlag = (value) => value === true || value === 'true';
+
 const getAccount = async (req, res, next) => {
   try {
-    const account = await settingsService.getAccount(req.user.id, { fields: req.query.fields });
+    const account = await settingsService.getAccount(req.user.id, {
+      fields: req.query.fields,
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(account);
   } catch (error) {
     next(error);
@@ -142,7 +163,20 @@ const getAccount = async (req, res, next) => {
 const updateAccount = async (req, res, next) => {
   try {
     const payload = validate(accountSchema, req.body);
-    const account = await settingsService.updateAccount(req.user.id, payload);
+    const account = await settingsService.updateAccount(req.user.id, payload, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
+    res.json(account);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetAccount = async (req, res, next) => {
+  try {
+    const account = await settingsService.resetAccount(req.user.id, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(account);
   } catch (error) {
     next(error);
@@ -154,7 +188,7 @@ const getSecurity = async (req, res, next) => {
     const data = await settingsService.getSecurity(req.user.id, {
       includeDeleted: includeDeleted(req.query, req.user),
       currentSessionId: req.session?.id,
-      analytics: req.query.analytics,
+      analytics: parseAnalyticsFlag(req.query.analytics),
     });
     res.json(data);
   } catch (error) {
@@ -171,7 +205,7 @@ const updateSecurity = async (req, res, next) => {
       {
         includeDeleted: includeDeleted(req.query, req.user),
         currentSessionId: req.session?.id,
-        analytics: req.query.analytics,
+        analytics: parseAnalyticsFlag(req.query.analytics),
       }
     );
     res.json(data);
@@ -180,9 +214,24 @@ const updateSecurity = async (req, res, next) => {
   }
 };
 
+const resetSecurity = async (req, res, next) => {
+  try {
+    const data = await settingsService.resetSecurity(req.user.id, {
+      includeDeleted: includeDeleted(req.query, req.user),
+      currentSessionId: req.session?.id,
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
+    res.json(data);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getPrivacy = async (req, res, next) => {
   try {
-    const privacy = await settingsService.getPrivacy(req.user.id);
+    const privacy = await settingsService.getPrivacy(req.user.id, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(privacy);
   } catch (error) {
     next(error);
@@ -192,7 +241,20 @@ const getPrivacy = async (req, res, next) => {
 const updatePrivacy = async (req, res, next) => {
   try {
     const payload = validate(privacySchema, req.body);
-    const privacy = await settingsService.updatePrivacy(req.user.id, payload);
+    const privacy = await settingsService.updatePrivacy(req.user.id, payload, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
+    res.json(privacy);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetPrivacy = async (req, res, next) => {
+  try {
+    const privacy = await settingsService.resetPrivacy(req.user.id, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(privacy);
   } catch (error) {
     next(error);
@@ -201,7 +263,9 @@ const updatePrivacy = async (req, res, next) => {
 
 const getNotifications = async (req, res, next) => {
   try {
-    const notifications = await settingsService.getNotifications(req.user.id);
+    const notifications = await settingsService.getNotifications(req.user.id, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(notifications);
   } catch (error) {
     next(error);
@@ -211,7 +275,20 @@ const getNotifications = async (req, res, next) => {
 const updateNotifications = async (req, res, next) => {
   try {
     const payload = validate(notificationsSchema, req.body);
-    const notifications = await settingsService.updateNotifications(req.user.id, payload);
+    const notifications = await settingsService.updateNotifications(req.user.id, payload, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
+    res.json(notifications);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetNotifications = async (req, res, next) => {
+  try {
+    const notifications = await settingsService.resetNotifications(req.user.id, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(notifications);
   } catch (error) {
     next(error);
@@ -220,7 +297,9 @@ const updateNotifications = async (req, res, next) => {
 
 const getPayments = async (req, res, next) => {
   try {
-    const payments = await settingsService.getPayments(req.user.id);
+    const payments = await settingsService.getPayments(req.user.id, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(payments);
   } catch (error) {
     next(error);
@@ -230,7 +309,20 @@ const getPayments = async (req, res, next) => {
 const updatePayments = async (req, res, next) => {
   try {
     const payload = validate(paymentsSchema, req.body);
-    const payments = await settingsService.updatePayments(req.user.id, payload);
+    const payments = await settingsService.updatePayments(req.user.id, payload, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
+    res.json(payments);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetPayments = async (req, res, next) => {
+  try {
+    const payments = await settingsService.resetPayments(req.user.id, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(payments);
   } catch (error) {
     next(error);
@@ -239,7 +331,9 @@ const updatePayments = async (req, res, next) => {
 
 const getTheme = async (req, res, next) => {
   try {
-    const theme = await settingsService.getTheme(req.user.id);
+    const theme = await settingsService.getTheme(req.user.id, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(theme);
   } catch (error) {
     next(error);
@@ -249,7 +343,20 @@ const getTheme = async (req, res, next) => {
 const updateTheme = async (req, res, next) => {
   try {
     const payload = validate(themeSchema, req.body);
-    const theme = await settingsService.updateTheme(req.user.id, payload);
+    const theme = await settingsService.updateTheme(req.user.id, payload, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
+    res.json(theme);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetTheme = async (req, res, next) => {
+  try {
+    const theme = await settingsService.resetTheme(req.user.id, {
+      analytics: parseAnalyticsFlag(req.query.analytics),
+    });
     res.json(theme);
   } catch (error) {
     next(error);
@@ -272,6 +379,7 @@ const createApiToken = async (req, res, next) => {
     const token = await settingsService.createApiToken(req.user, payload, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
+      analytics: parseAnalyticsFlag(req.query.analytics),
     });
     await persistIdempotentResponse(req, res, { status: 201, body: token });
     res.status(201).json(token);
@@ -280,9 +388,39 @@ const createApiToken = async (req, res, next) => {
   }
 };
 
+const getApiToken = async (req, res, next) => {
+  try {
+    const query = validate(tokenQuerySchema, req.query);
+    const token = await settingsService.getApiToken(req.user, req.params.id, {
+      includeDeleted: includeDeleted(req.query, req.user),
+      analytics: Boolean(query.analytics),
+    });
+    res.json(token);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateApiToken = async (req, res, next) => {
+  try {
+    const query = validate(tokenQuerySchema, req.query);
+    const payload = validate(updateTokenSchema, req.body);
+    const token = await settingsService.updateApiToken(req.user, req.params.id, payload, {
+      includeDeleted: includeDeleted(req.query, req.user),
+      analytics: Boolean(query.analytics),
+    });
+    res.json(token);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const deleteApiToken = async (req, res, next) => {
   try {
-    const result = await settingsService.revokeApiToken(req.user, req.params.id);
+    const query = validate(tokenQuerySchema, req.query);
+    const result = await settingsService.revokeApiToken(req.user, req.params.id, {
+      analytics: Boolean(query.analytics),
+    });
     res.json(result);
   } catch (error) {
     next(error);
@@ -292,17 +430,25 @@ const deleteApiToken = async (req, res, next) => {
 module.exports = {
   getAccount,
   updateAccount,
+  resetAccount,
   getSecurity,
   updateSecurity,
+  resetSecurity,
   getPrivacy,
   updatePrivacy,
+  resetPrivacy,
   getNotifications,
   updateNotifications,
+  resetNotifications,
   getPayments,
   updatePayments,
+  resetPayments,
   getTheme,
   updateTheme,
+  resetTheme,
   listApiTokens,
   createApiToken,
+  getApiToken,
+  updateApiToken,
   deleteApiToken,
 };
