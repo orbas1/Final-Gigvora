@@ -13,6 +13,14 @@ const verificationRoutes = require('./verificationRoutes');
 const webhookRoutes = require('./webhookRoutes');
 const legalRoutes = require('./legalRoutes');
 const paymentRoutes = require('./paymentRoutes');
+const jobRoutes = require('./jobRoutes');
+const applicationRoutes = require('./applicationRoutes');
+const interviewRoutes = require('./interviewRoutes');
+const analyticsRoutes = require('./analyticsRoutes');
+const scorecardRoutes = require('./scorecardRoutes');
+const conversationRoutes = require('./conversationRoutes');
+const networkingRoutes = require('./networkingRoutes');
+const liveRoutes = require('./liveRoutes');
 const { idempotencyMiddleware } = require('../middleware/idempotency');
 
 const router = express.Router();
@@ -32,5 +40,13 @@ router.use('/verification', verificationRoutes);
 router.use('/webhooks', webhookRoutes);
 router.use('/legal', legalRoutes);
 router.use('/', paymentRoutes);
+router.use('/jobs', jobRoutes);
+router.use('/applications', applicationRoutes);
+router.use('/interviews', interviewRoutes);
+router.use('/scorecards', scorecardRoutes);
+router.use('/', analyticsRoutes);
+router.use('/', conversationRoutes);
+router.use('/networking', networkingRoutes);
+router.use('/live', liveRoutes);
 
 module.exports = router;
