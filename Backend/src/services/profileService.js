@@ -621,7 +621,7 @@ const listReviews = async (userId, { limit, cursor, sort, analytics = false, inc
   const profile = await ensureProfileByUser(userId, { includeDeleted });
   const pagination = buildPagination({ limit, cursor, sort }, ['created_at', 'rating']);
   return paginateRecords(Review, {
-    where: { profile_id: profile.id },
+    where: { subject_type: 'profile', subject_id: profile.id },
     pagination,
     includeDeleted,
     analytics,
@@ -653,7 +653,7 @@ const addReview = async (userId, payload, { actor } = {}) => {
     }
   }
 
-  return Review.create({ ...payload, profile_id: profile.id });
+  return Review.create({ ...payload, subject_type: 'profile', subject_id: profile.id });
 };
 
 const recordProfileView = async ({ profileId, viewerId, source }) => {
