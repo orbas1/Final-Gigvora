@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class PortfolioItem extends Model {
     static associate(models) {
       this.belongsTo(models.Profile, { foreignKey: 'profile_id', as: 'profile' });
@@ -23,7 +25,7 @@ module.exports = (sequelize) => {
       title: DataTypes.STRING,
       description: DataTypes.TEXT,
       url: DataTypes.STRING,
-      media: DataTypes.JSONB || DataTypes.JSON,
+      media: jsonType,
     },
     {
       sequelize,

@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class WebhookSubscription extends Model {}
 
   WebhookSubscription.init(
@@ -10,7 +12,7 @@ module.exports = (sequelize) => {
       id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
       name: DataTypes.STRING,
       url: DataTypes.STRING,
-      events: DataTypes.JSONB || DataTypes.JSON,
+      events: jsonType,
     },
     {
       sequelize,

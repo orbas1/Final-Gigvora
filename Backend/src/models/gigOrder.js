@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class GigOrder extends Model {
     static associate(models) {
       this.belongsTo(models.Gig, { foreignKey: 'gig_id', as: 'gig' });
@@ -29,7 +31,7 @@ module.exports = (sequelize) => {
       },
       requirements: DataTypes.TEXT,
       notes: DataTypes.TEXT,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
+      metadata: jsonType,
       placed_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
       started_at: DataTypes.DATE,
       delivered_at: DataTypes.DATE,

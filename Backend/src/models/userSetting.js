@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class UserSetting extends Model {
     static associate(models) {
       this.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
@@ -21,10 +23,10 @@ module.exports = (sequelize) => {
         allowNull: false,
         unique: true,
       },
-      preferences: DataTypes.JSONB || DataTypes.JSON,
-      security: DataTypes.JSONB || DataTypes.JSON,
-      privacy: DataTypes.JSONB || DataTypes.JSON,
-      theme: DataTypes.JSONB || DataTypes.JSON,
+      preferences: jsonType,
+      security: jsonType,
+      privacy: jsonType,
+      theme: jsonType,
     },
     {
       sequelize,

@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class FileAsset extends Model {
     static associate(models) {
       this.belongsTo(models.User, { foreignKey: 'owner_id', as: 'owner' });
@@ -24,7 +26,7 @@ module.exports = (sequelize) => {
       storage_key: DataTypes.STRING,
       mime_type: DataTypes.STRING,
       size_bytes: DataTypes.INTEGER,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
+      metadata: jsonType,
       scanned_at: DataTypes.DATE,
       status: {
         type: DataTypes.ENUM('pending', 'ready', 'blocked'),

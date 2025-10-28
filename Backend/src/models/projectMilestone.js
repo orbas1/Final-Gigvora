@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class ProjectMilestone extends Model {
     static associate(models) {
       this.belongsTo(models.Project, { foreignKey: 'project_id', as: 'project' });
@@ -26,7 +28,7 @@ module.exports = (sequelize) => {
       },
       sequence: DataTypes.INTEGER,
       released_at: DataTypes.DATE,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
+      metadata: jsonType,
       deleted_at: DataTypes.DATE,
     },
     {

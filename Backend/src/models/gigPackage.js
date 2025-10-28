@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class GigPackage extends Model {
     static associate(models) {
       this.belongsTo(models.Gig, { foreignKey: 'gig_id', as: 'gig' });
@@ -19,7 +21,7 @@ module.exports = (sequelize) => {
       price: { type: DataTypes.DECIMAL, allowNull: false },
       delivery_days: { type: DataTypes.INTEGER, allowNull: false },
       revisions: DataTypes.INTEGER,
-      features: DataTypes.JSONB || DataTypes.JSON,
+      features: jsonType,
     },
     {
       sequelize,

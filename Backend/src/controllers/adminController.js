@@ -2,7 +2,27 @@ const Joi = require('joi');
 const service = require('../services/adminService');
 
 const overviewSchema = Joi.object({ from: Joi.date(), to: Joi.date() });
-const restoreSchema = Joi.object({ entity_type: Joi.string().required(), id: Joi.string().uuid().required() });
+const restoreSchema = Joi.object({
+  entity_type: Joi.string()
+    .valid(
+      'user',
+      'profile',
+      'project',
+      'project_bid',
+      'project_milestone',
+      'project_deliverable',
+      'project_time_log',
+      'project_review',
+      'gig',
+      'gig_addon',
+      'gig_faq',
+      'gig_order',
+      'order_submission',
+      'order_review'
+    )
+    .required(),
+  id: Joi.string().uuid().required(),
+});
 
 const overview = async (req, res, next) => {
   try {

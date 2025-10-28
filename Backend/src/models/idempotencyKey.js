@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class IdempotencyKey extends Model {}
 
   IdempotencyKey.init(
@@ -24,7 +26,7 @@ module.exports = (sequelize) => {
       method: DataTypes.STRING,
       path: DataTypes.STRING,
       request_hash: DataTypes.STRING,
-      response_body: DataTypes.JSONB || DataTypes.JSON,
+      response_body: jsonType,
       response_status: DataTypes.INTEGER,
       locked_at: DataTypes.DATE,
     },

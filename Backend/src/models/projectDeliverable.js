@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class ProjectDeliverable extends Model {
     static associate(models) {
       this.belongsTo(models.Project, { foreignKey: 'project_id', as: 'project' });
@@ -21,7 +23,7 @@ module.exports = (sequelize) => {
       reviewer_id: DataTypes.UUID,
       title: { type: DataTypes.STRING, allowNull: false },
       description: DataTypes.TEXT,
-      attachments: DataTypes.JSONB || DataTypes.JSON,
+      attachments: jsonType,
       status: {
         type: DataTypes.ENUM('submitted', 'accepted', 'revision_requested'),
         allowNull: false,

@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class ProjectInvite extends Model {
     static associate(models) {
       this.belongsTo(models.Project, { foreignKey: 'project_id', as: 'project' });
@@ -24,7 +26,7 @@ module.exports = (sequelize) => {
         defaultValue: 'pending',
       },
       responded_at: DataTypes.DATE,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
+      metadata: jsonType,
     },
     {
       sequelize,

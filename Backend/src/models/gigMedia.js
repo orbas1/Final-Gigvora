@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class GigMedia extends Model {
     static associate(models) {
       this.belongsTo(models.Gig, { foreignKey: 'gig_id', as: 'gig' });
@@ -16,7 +18,7 @@ module.exports = (sequelize) => {
       type: { type: DataTypes.ENUM('image', 'video', 'document'), allowNull: false, defaultValue: 'image' },
       url: { type: DataTypes.STRING, allowNull: false },
       sort_order: DataTypes.INTEGER,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
+      metadata: jsonType,
     },
     {
       sequelize,

@@ -244,7 +244,7 @@ const listMilestones = async (req, res, next) => {
 
 const createMilestone = async (req, res, next) => {
   try {
-    const payload = validate(milestoneUpdateSchema, req.body);
+    const payload = validate(milestoneCreateSchema, req.body);
     const milestone = await projectService.createMilestone(req.params.id, req.user, payload);
     res.status(201).json(milestone);
   } catch (error) {
@@ -254,7 +254,7 @@ const createMilestone = async (req, res, next) => {
 
 const updateMilestone = async (req, res, next) => {
   try {
-    const payload = validate(milestoneCreateSchema, req.body);
+    const payload = validate(milestoneUpdateSchema, req.body);
     const milestone = await projectService.updateMilestone(req.params.id, req.user, payload);
     res.json(milestone);
   } catch (error) {

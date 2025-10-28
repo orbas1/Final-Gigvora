@@ -3,8 +3,10 @@
 const { Model, DataTypes } = require('sequelize');
 const slugify = require('slugify');
 const { randomUUID } = require('crypto');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class Gig extends Model {
     static associate(models) {
       this.belongsTo(models.User, { foreignKey: 'seller_id', as: 'seller' });
@@ -30,8 +32,8 @@ module.exports = (sequelize) => {
       price_min: DataTypes.DECIMAL,
       price_max: DataTypes.DECIMAL,
       currency: { type: DataTypes.STRING, defaultValue: 'USD' },
-      metadata: DataTypes.JSONB || DataTypes.JSON,
-      analytics_snapshot: DataTypes.JSONB || DataTypes.JSON,
+      metadata: jsonType,
+      analytics_snapshot: jsonType,
     },
     {
       sequelize,

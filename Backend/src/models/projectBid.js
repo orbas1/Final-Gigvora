@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class ProjectBid extends Model {
     static associate(models) {
       this.belongsTo(models.Project, { foreignKey: 'project_id', as: 'project' });
@@ -19,8 +21,8 @@ module.exports = (sequelize) => {
       currency: { type: DataTypes.STRING, defaultValue: 'USD' },
       timeline: DataTypes.STRING,
       proposal: DataTypes.TEXT,
-      attachments: DataTypes.JSONB || DataTypes.JSON,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
+      attachments: jsonType,
+      metadata: jsonType,
       status: {
         type: DataTypes.ENUM('pending', 'accepted', 'rejected', 'withdrawn'),
         allowNull: false,

@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class Notification extends Model {
     static associate(models) {
       this.belongsTo(models.User, { foreignKey: 'user_id', as: 'user' });
@@ -21,7 +23,7 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       type: DataTypes.STRING,
-      data: DataTypes.JSONB || DataTypes.JSON,
+      data: jsonType,
       read_at: DataTypes.DATE,
       channel: DataTypes.STRING,
     },

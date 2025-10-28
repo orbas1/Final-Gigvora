@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class VerificationRequest extends Model {}
 
   VerificationRequest.init(
@@ -11,7 +13,7 @@ module.exports = (sequelize) => {
       subject_type: DataTypes.ENUM('user', 'org'),
       subject_id: DataTypes.UUID,
       status: DataTypes.ENUM('pending', 'verified', 'rejected'),
-      data: DataTypes.JSONB || DataTypes.JSON,
+      data: jsonType,
     },
     {
       sequelize,

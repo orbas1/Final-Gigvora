@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class OrderReview extends Model {
     static associate(models) {
       this.belongsTo(models.GigOrder, { foreignKey: 'order_id', as: 'order' });
@@ -19,7 +21,7 @@ module.exports = (sequelize) => {
       reviewee_id: { type: DataTypes.UUID, allowNull: false },
       rating: { type: DataTypes.INTEGER, allowNull: false },
       comment: DataTypes.TEXT,
-      metadata: DataTypes.JSONB || DataTypes.JSON,
+      metadata: jsonType,
       deleted_at: DataTypes.DATE,
     },
     {

@@ -1,10 +1,12 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 const bcrypt = require('bcrypt');
 const { v4: uuid } = require('uuid');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class User extends Model {
     static associate(models) {
       this.hasOne(models.Profile, { foreignKey: 'user_id', as: 'profile' });
@@ -113,7 +115,7 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
       metadata: {
-        type: DataTypes.JSONB || DataTypes.JSON,
+        type: jsonType,
         allowNull: true,
       },
     },

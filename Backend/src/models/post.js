@@ -1,8 +1,10 @@
 'use strict';
 
 const { Model, DataTypes } = require('sequelize');
+const { getJsonType } = require('../utils/sequelize');
 
 module.exports = (sequelize) => {
+  const jsonType = getJsonType(sequelize, DataTypes);
   class Post extends Model {
     static associate(models) {
       this.belongsTo(models.User, { foreignKey: 'user_id', as: 'author' });
@@ -23,13 +25,13 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       content: DataTypes.TEXT,
-      attachments: DataTypes.JSONB || DataTypes.JSON,
-      share_ref: DataTypes.JSONB || DataTypes.JSON,
+      attachments: jsonType,
+      share_ref: jsonType,
       visibility: {
         type: DataTypes.ENUM('public', 'connections', 'private'),
         defaultValue: 'public',
       },
-      analytics_snapshot: DataTypes.JSONB || DataTypes.JSON,
+      analytics_snapshot: jsonType,
     },
     {
       sequelize,
