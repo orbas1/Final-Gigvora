@@ -1,3 +1,4 @@
+const { User, Profile, Job, JobStage, JobApplication, Scorecard, Interview } = require('../models');
 const { User, Profile, Conversation, Message, sequelize } = require('../models');
 const { User, Profile, Connection, sequelize } = require('../models');
 const {
@@ -38,6 +39,30 @@ const RESTORABLE_MODELS = {
 };
 
 const restore = async ({ entity_type, id }) => {
+  switch (entity_type) {
+    case 'user':
+      await User.restore({ where: { id } });
+      break;
+    case 'profile':
+      await Profile.restore({ where: { id } });
+      break;
+    case 'job':
+      await Job.restore({ where: { id } });
+      break;
+    case 'job_stage':
+      await JobStage.restore({ where: { id } });
+      break;
+    case 'job_application':
+      await JobApplication.restore({ where: { id } });
+      break;
+    case 'scorecard':
+      await Scorecard.restore({ where: { id } });
+      break;
+    case 'interview':
+      await Interview.restore({ where: { id } });
+      break;
+    default:
+      throw new ApiError(400, 'Unsupported entity type', 'UNSUPPORTED_ENTITY');
   const model = RESTORABLE_MODELS[entity_type];
 
   if (!model || typeof model.restore !== 'function') {
